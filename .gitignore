@@ -1,0 +1,43 @@
+# Data and generated artifacts never enter git (CLAUDE.md, non-negotiable 8)
+/data/
+*.parquet
+*.crc
+spark-warehouse/
+metastore_db/
+derby.log
+
+# JVM / sbt / IDE
+target/
+project/project/
+.bsp/
+.bloop/
+.metals/
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# OS noise and logs
+.DS_Store
+Thumbs.db
+*.log
