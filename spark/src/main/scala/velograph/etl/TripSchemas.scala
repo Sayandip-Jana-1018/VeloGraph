@@ -2,7 +2,10 @@ package velograph.etl
 
 import org.apache.spark.sql.types._
 
-/** Schemas of the raw inputs. Every read uses one of these: nothing is ever inferred (CLAUDE.md). */
+/**
+ * Schemas of the raw inputs (CSV and JSON). Every read uses one: nothing is ever inferred (CLAUDE.md). The
+ * lake's own tables are declared in [[LakeSchemas]].
+ */
 object TripSchemas {
 
   /** Columns of the Citi Bike trip CSVs, in file order (format in use since 2021). */
@@ -30,43 +33,6 @@ object TripSchemas {
    */
   val RawTrip: StructType =
     StructType(TripColumns.map(StructField(_, StringType)) :+ StructField(CorruptRecord, StringType))
-
-  /**
-   * `lake/bronze/trips`. Read with this schema: it also fixes the type of the partition column, which Spark
-   * would otherwise guess from the folder names (`ym=202609` looks like an integer).
-   */
-  val BronzeTrip: StructType = RawTrip
-    .add("_source_file", StringType)
-    .add("_ingested_at", TimestampType)
-    .add("ym", StringType)
-
-  /**
-   * `lake/silver/trips`, partitioned by `start_date`; columns in `SilverTripsTransforms.SilverColumns` order.
-   */
-  val SilverTrip: StructType = StructType(
-    Seq(
-      StructField("ride_id", StringType),
-      StructField("rideable_type", StringType),
-      StructField("member_casual", StringType),
-      StructField("started_at", TimestampType),
-      StructField("ended_at", TimestampType),
-      StructField("start_station_id", StringType),
-      StructField("start_station_name", StringType),
-      StructField("end_station_id", StringType),
-      StructField("end_station_name", StringType),
-      StructField("start_lat", DoubleType),
-      StructField("start_lng", DoubleType),
-      StructField("end_lat", DoubleType),
-      StructField("end_lng", DoubleType),
-      StructField("duration_s", IntegerType),
-      StructField("distance_m", DoubleType),
-      StructField("speed_kmh", DoubleType),
-      StructField("is_round_trip", BooleanType),
-      StructField("start_hour", IntegerType),
-      StructField("dow", IntegerType),
-      StructField("start_date", DateType)
-    )
-  )
 
   /** GBFS 2.3 `station_information.json`, as saved by the recorder; only the fields VeloGraph uses. */
   val GbfsStationInformation: StructType = StructType(

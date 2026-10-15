@@ -20,9 +20,9 @@ object SilverTripsJob extends SparkJob {
   val jobName = "silver-trips"
 
   def run(ctx: JobContext, args: Seq[String]): Map[String, Any] = {
-    val spark  = ctx.spark
+    val lake   = new LakeTables(ctx.spark, ctx.paths)
     val rules  = DqRules.fromConfig(ctx.cfg.raw.getConfig("velograph.dq"))
-    val bronze = spark.read.schema(TripSchemas.BronzeTrip).parquet(ctx.paths.bronze.resolve("trips").uri)
+    val bronze = lake.read(LakeTable.BronzeTrips)
 
     // Three actions reuse this result (silver write, quarantine write, DQ report). Persisting it means the bronze
     // scan, the parsing and the duplicate-detection shuffle run once instead of three times.
@@ -36,7 +36,7 @@ object SilverTripsJob extends SparkJob {
       .mode(SaveMode.Overwrite)
       .option("partitionOverwriteMode", "static") // full rebuild: replace the whole table
       .partitionBy("start_date")
-      .parquet(ctx.paths.silver.resolve("trips").uri)
+      .parquet(lake.uri(LakeTable.SilverTrips))
 
     classified
       .where(col("reject_reason").isNotNull)

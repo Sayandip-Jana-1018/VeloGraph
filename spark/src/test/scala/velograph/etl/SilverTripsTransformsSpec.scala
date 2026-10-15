@@ -82,14 +82,14 @@ class SilverTripsTransformsSpec extends AnyFunSuite with SharedSparkSession {
     assert(actual > 850 && actual < 1000)
   }
 
-  test("station ids that lost their trailing zero get it back; everything else is untouched") {
+  test("station ids that lost their trailing zero get it back; the Column and String rules agree") {
     import spark.implicits._
-    val ids = Seq("5980.1", "5980.10", "6432.11", "JC102", "HB101", "123")
-      .toDF("id")
-      .select(normalizeStationId($"id"))
-      .as[String]
-      .collect()
-    assert(ids.toSeq == Seq("5980.10", "5980.10", "6432.11", "JC102", "HB101", "123"))
+    val raw      = Seq("5980.1", "5980.10", "6432.11", "JC102", "HB101", "123")
+    val expected = Seq("5980.10", "5980.10", "6432.11", "JC102", "HB101", "123")
+    val viaSpark = raw.toDF("id").select(StationIds.normalize($"id")).as[String].collect().toSeq
+    assert(viaSpark == expected)
+    assert(raw.map(StationIds.normalize) == expected)
+    assert(StationIds.normalize(null: String) == null)
   }
 
   test("ISO day of week counts Monday as 1 and Sunday as 7") {
@@ -146,9 +146,9 @@ class SilverTripsTransformsSpec extends AnyFunSuite with SharedSparkSession {
     assert(row.getAs[Int]("dow") == 2) // Tuesday 1 Sep 2026
   }
 
-  test("what the silver job writes matches TripSchemas.SilverTrip, the schema every reader uses") {
+  test("what the silver job writes matches LakeSchemas.SilverTrip, the schema every reader uses") {
     import spark.implicits._
     val written = classify(Seq(trip("ok")).toDF(), rules).select(SilverColumns.map(col): _*).schema
-    assert(written.map(f => f.name -> f.dataType) == TripSchemas.SilverTrip.map(f => f.name -> f.dataType))
+    assert(written.map(f => f.name -> f.dataType) == LakeSchemas.SilverTrip.map(f => f.name -> f.dataType))
   }
 }
