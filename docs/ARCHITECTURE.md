@@ -322,6 +322,38 @@ destinations; undirected weight = trips(u→v) + trips(v→u).
 Outputs land in `lake/graph/station_metrics` (one row per station, all metrics). They are joined into the ML features
 (CO6 → CO4) and exported for the Network page.
 
+**As built (P3, `velograph.graph`, run by `GraphMetricsJob`).** Each piece has its own object, so it can be
+unit-tested on toy graphs (`GraphAlgorithmsSpec`) and end to end on a synthetic city (`GraphMetricsSpec`).
+
+- **Construction** (`StationGraph`).
+  - Vertex ids are `xxhash64(station_id)`. The build fails on a collision or on a route endpoint that is not a station.
+  - The full graph keeps self-loops for strength. PageRank, degrees, components and paths use the graph without them.
+  - `GraphStructure.partitioning` measures the vertex-cut replication factor of four strategies, and EdgePartition2D
+    is used.
+- **Pregel PageRank** (`WeightedPageRank`).
+  - It uses GraphX's delta formulation: a vertex forwards only its rank *change*, and stops below `tol`.
+  - Each vertex records the supersteps that updated it in a `BitSet` inside its state. Recomputation-safe, unlike
+    an accumulator, this gives the "active vertices per superstep" curve.
+  - Dangling stations lose their mass, as in GraphX; the final normalization to sum 1 restores it.
+  - The same program with vector-valued state computes personalized PageRank for all 20 landmarks in one Pregel run.
+- **Communities** (`Communities`).
+  - Label votes are weighted by trips. Ties keep the current label, otherwise the smallest label wins.
+  - Stations take turns by vertex-id parity (half update in even supersteps, half in odd), which damps the two-cycle
+    oscillation of synchronous label propagation.
+  - Label propagation stops at a local optimum. A greedy modularity merge (Clauset–Newman–Moore) on the condensed
+    label graph then joins linked communities while ΔQ = w_ab/m − D_a·D_b/(2m²) > 0, so Q can only rise. GraphX's
+    unweighted `LabelPropagation` is reported alongside as the baseline.
+  - Modularity Q is computed with DataFrames. Label groups of fewer than 3 stations get `community_id = 0`.
+- **Paths** (`TravelTimes`).
+  - Multi-source Bellman-Ford in Pregel over routes with ≥ 10 trips, each weighted by its median ride time.
+  - Landmarks are chosen by a greedy spatial spread: walk the PageRank order and keep stations ≥ 2 km apart.
+  - Hop counts to the top-10 hubs use GraphX `ShortestPaths` on the directed strong graph.
+- **Operator tour and explainer.**
+  - `OperatorTour` applies 13 operators to the real graph, and every claim it reports is asserted.
+  - `PregelExplainer` runs PageRank on the top hub's neighbourhood twice: once with GraphX, and once replayed on the
+    driver with the same `Program` (vprog, sendMsg, mergeMsg) and Pregel's activation rules. The replay records every
+    superstep's states and messages for the `pregel` portal, and must end in GraphX's exact state, or the job fails.
+
 ## 8. Machine learning (MLlib)
 
 ### 8.1 Framing
@@ -454,7 +486,7 @@ Static exports are written to `data/serving/` and copied into `web/public/data/`
 | `overview.json`, `hero-trips.json` (one real evening, sampled) | ServingExportJob | Home |
 | `insights/<id>.json`, `insights/index.json` | InsightsJob | Insights |
 | `rdd-fundamentals.json`, `dq-report.json`, `jobs/*.json` | batch jobs | Cluster |
-| `network-nodes.json`, `network-flows.json`, `network-communities.json`, `network-paths.json` | GraphMetricsJob | Network |
+| `network-summary.json` (graph size, vertex-cut comparison, PageRank runs and rankings, AM/PM shift, strength, communities, components, triangles, paths, operator tour, timings), `network-nodes.json` (one row per station, all metrics), `network-flows.json` (top routes overall, AM and PM), `network-communities.json`, `network-paths.json` (hops to hubs, travel times and personalized PageRank per landmark), `network-pregel.json` (superstep-by-superstep PageRank on a hub neighbourhood) | GraphMetricsJob | Network, `pregel` / `network` / `graph-ops` portals |
 | `archetypes.json`, `ml-regression.json`, `ml-classification.json`, `ml-ablation.json`, `ml-correlation.json`, `model-cards.json` | ML Lab + jobs | Models |
 | `live-replay/*.json` | recorder → exporter | Live (offline mode) |
 
@@ -496,10 +528,32 @@ motion, deck.gl 9 + MapLibre 6 via react-map-gl 8 (CARTO Dark Matter basemap, no
 | `/cluster` | Cluster computing | live topology: 3 brokers (leaders/ISR), Spark master + workers, streaming health, job timeline |
 | `/syllabus` | Traceability | unit/CO → feature → evidence |
 
-**Design language — "Nocturne".** A dark-first operations aesthetic for a living city: near-black blue canvas,
-hairline borders, glass only over maps, one accent per meaning (supply, empty-risk, full-risk, graph, healthy), Geist +
-Geist Mono with tabular numerals, 150–300 ms motion, `prefers-reduced-motion` respected. The final palette is
-validated for contrast and colour-blind safety with the `dataviz` skill in P6.
+**Evidence portals** ([ADR 011](adr/011-inkglass-design-and-portals.md)). Every module of the project has a portal: a
+full-screen glass sheet with its own URL (`/portal/<id>`, a Next.js parallel `@portal` slot plus an intercepting
+route), opened as an overlay from any page, as a full page on refresh, closed by Back. Every portal has the same
+layout: a header with unit/CO chips and the source file's `generatedAt`; a hero visual; 2–4 acts (one concept, one
+exact chart, one handwritten takeaway each); "How Spark did it" with the real code excerpt; a "Say it in the viva"
+sticky note; and a numbers ledger with JSON paths. Catalogue: `lake`, `rdd-lab`, `sql` (+ one sub-portal per
+insight), `spark-ui`, `pregel`, `network`, `graph-ops`, `models`, `streaming`, `cluster`, `syllabus`. The pages above
+are the doors into them.
+
+**Design language — "Inkglass"** (ADR 011). Each of the four requested styles has its own layer:
+
+| Layer | Style | Used for |
+|---|---|---|
+| Canvas | maximalism | aurora mesh, paper grain, street-grid doodles, oversized type, stickers, tape, tickers |
+| Glass | glassmorphism | portals, map overlays, floating panels |
+| Clay | neumorphism | controls only: toggles, AM/PM segments, superstep scrubbers, KPI pucks |
+| Ink | hand-drawn | rough.js frames, rough-notation highlights, freehand arrows with Caveat notes |
+
+Data marks stay exact (ECharts, deck.gl); ink only annotates them. The rules:
+
+- Every colour is a CSS-variable token, and the palette is checked with the `dataviz` skill.
+- All text meets WCAG AA. Clay controls keep text labels and focus rings.
+- Glass falls back to solid surfaces when blur is unsupported or reduced transparency is requested.
+- `prefers-reduced-motion` turns off drawing animations.
+
+Fonts: Bricolage Grotesque, Inter, Caveat and JetBrains Mono, all via `next/font`.
 
 **States.** Every component has loading, empty, error and offline states. When the gateway is unreachable a banner
 appears and the Live page switches to recorded replay automatically.
@@ -509,8 +563,13 @@ appears and the Live page switches to recorded replay automatically.
 Configuration precedence: `spark/src/main/resources/application.conf` (defaults) ← `conf/<mode>.conf` ←
 `VELOGRAPH_*` environment variables. Domain settings live there too: `velograph.dq` (silver quality rules),
 `velograph.calendar` (date dimension span), `velograph.gold.panel` (the Jun–Sep span of gold tables and insights),
-`velograph.gold.peaks` (commute windows) and `velograph.rdd-demo.month`. Event logs record block updates
-(`spark.eventLog.logBlockUpdates.enabled`), so the history server's Storage tab shows what each job cached.
+`velograph.gold.peaks` (commute windows), `velograph.rdd-demo.month` and `velograph.graph` (edge partitions,
+PageRank reset probability and tolerance, superstep cap, strong-tie rule, label-propagation supersteps, hubs,
+landmarks, travel-time edge threshold, Pregel-explainer size, office-district boxes, export sizes; the cluster uses
+4 edge partitions). Event logs record block updates
+(`spark.eventLog.logBlockUpdates.enabled`), so the history server's Storage tab shows what each job cached; the
+GraphX job turns this off through its own `sparkConf` (Pregel's per-superstep caching made a 1.1 GB log). Event logs
+are zstd-compressed (`spark.eventLog.compress`).
 
 Dev-mode Spark settings: `spark.master=local[20]`, `spark.sql.shuffle.partitions=96`,
 `spark.sql.session.timeZone=America/New_York`, `spark.serializer=KryoSerializer`, `spark.eventLog.enabled=true`
@@ -562,3 +621,4 @@ Open-Meteo.com (CC BY 4.0). Basemap © CARTO, © OpenStreetMap contributors.
 | 008 | sbt 1.12 rather than sbt 2.0 | plugin and IntelliJ stability |
 | [009](adr/009-docker-vm-6gb-budget.md) | Size the Docker cluster for a 6 GB VM | `.wslconfig` caps the VM at 6 GB; changing it is the user's call |
 | [010](adr/010-kafka-topic-naming.md) | Topic names use hyphens, never underscores | Kafka metric names treat `.` and `_` alike |
+| [011](adr/011-inkglass-design-and-portals.md) | "Inkglass" design language; one evidence portal per module | the user wants every module shown in the UI, maximalist + neumorphic + glass + hand-drawn |

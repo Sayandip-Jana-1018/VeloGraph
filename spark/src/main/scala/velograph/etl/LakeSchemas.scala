@@ -121,4 +121,42 @@ object LakeSchemas {
     "ebike_share"       -> DoubleType,
     "is_self_loop"      -> BooleanType
   )
+
+  /**
+   * `graph/station_metrics`: one row per station with every GraphX metric (P3). Degrees and PageRank ignore
+   * round trips; strengths count them. Strong-graph columns are null for stations without a strong tie, hop
+   * columns for stations that cannot reach a hub along strong ties.
+   */
+  val GraphStationMetrics: StructType = fields(
+    "station_id"        -> StringType,
+    "vertex_id"         -> LongType,
+    "name"              -> StringType,
+    "lat"               -> DoubleType,
+    "lon"               -> DoubleType,
+    "capacity"          -> IntegerType,
+    "in_degree"         -> IntegerType,
+    "out_degree"        -> IntegerType,
+    "in_strength"       -> LongType,
+    "out_strength"      -> LongType,
+    "self_loop_trips"   -> LongType,
+    "net_strength"      -> LongType,
+    "imbalance_ratio"   -> DoubleType,
+    "pagerank_w"        -> DoubleType,
+    "pagerank_u"        -> DoubleType,
+    "pagerank_rank"     -> IntegerType,
+    "pr_am"             -> DoubleType,
+    "pr_pm"             -> DoubleType,
+    "pr_shift"          -> DoubleType,
+    "community_id"      -> IntegerType,
+    "community_size"    -> IntegerType,
+    "lpa_builtin_label" -> LongType,
+    "wcc_id"            -> LongType,
+    "scc_id"            -> LongType,
+    "scc_size"          -> IntegerType,
+    "strong_degree"     -> IntegerType,
+    "triangles"         -> IntegerType,
+    "clustering_coef"   -> DoubleType,
+    "hops_to_hub"       -> IntegerType,
+    "nearest_hub_id"    -> StringType
+  )
 }

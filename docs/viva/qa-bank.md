@@ -203,3 +203,161 @@ St%'`: East streets with a one-digit number, 23 stations), plus `RLIKE` for regu
 A window with no `PARTITION BY`, like `SUM(...) OVER ()` or `LAG(...) OVER (ORDER BY week)`, has to see every row,
 so Spark moves them into one partition. That would be a bottleneck on millions of rows. Ours run on at most a few
 dozen rows that are already aggregated, so it costs nothing, and the slowest insight still finishes in 11.8 s.
+
+## P3 · GraphX network intelligence
+
+**Q37. What is a property graph, and what is yours?**
+A directed multigraph in which every vertex and every edge carries a user-defined attribute. Ours has 2,490 stations
+as vertices (`StationAttr`: id, name, lat, lon, capacity) and 1,308,071 routes as edges (`RouteAttr`: trips,
+working-day AM- and PM-peak trips, weekend trips, median ride time), built from `gold/route_edges`. 2,403 edges are
+round trips (self-loops). It is dense: 21 % of all possible station pairs have at least one trip, and the median
+station sends riders to 495 different stations.
+
+**Q38. GraphX needs Long vertex ids. How did you get them?**
+`xxhash64(station_id)`, Spark's built-in 64-bit hash, so every job derives the same id without a lookup table. The
+build asserts that 2,490 stations give 2,490 distinct ids and that every route endpoint is a known station.
+Otherwise GraphX would silently create a vertex with a `null` attribute for an unknown endpoint.
+
+**Q39. What is vertex-cut partitioning, and why EdgePartition2D?**
+GraphX partitions *edges*. A vertex is copied to every partition that holds one of its edges, so it is the vertices
+that get cut. The replication factor, copies per vertex on average, is the memory cost and the cost of shipping
+vertex attributes to the edges in every superstep. We measured four strategies on 16 partitions:
+
+| Strategy | Copies per vertex |
+|---|---|
+| RandomVertexCut | 15.6 |
+| CanonicalRandomVertexCut | 15.6 |
+| EdgePartition1D | 15.6 |
+| EdgePartition2D | 6.9 |
+
+EdgePartition2D places each edge on a 4 × 4 grid by (source block, destination block), so a vertex can only appear
+in its row and its column: at most 2·√16 − 1 = 7 copies. The price is a little edge imbalance: the largest partition
+holds 1.13× the mean.
+
+**Q40. Explain Pregel.**
+Bulk-synchronous message passing in supersteps:
+
+1. Every vertex that received messages runs `vprog` on their merged value.
+2. `sendMsg` runs on the edges (triplets) of the vertices updated in step 1, emitting new messages.
+3. `mergeMsg` combines messages headed to the same vertex, like a combiner before the shuffle.
+
+A vertex that receives nothing stays inactive ("votes to halt"). Pregel stops when no message is left, or at
+`maxIterations`. Each superstep is one Spark job (`isEmpty at Pregel.scala` in the Spark UI).
+
+Our weighted PageRank converged in 49 supersteps (40 s). All 2,490 vertices stayed active almost to the end; then
+2,401 and finally 2,076 were still sending in the last two supersteps. The `pregel` portal replays a hub's
+8-station neighbourhood superstep by superstep, through to the final ones where the messages drop from 56 to 49, 7
+and 0.
+
+**Q41. How does your PageRank differ from GraphX's built-in one, and why do weights matter?**
+- **Built-in:** a station's rank is split equally over its distinct routes.
+- **Ours:** it is split in proportion to trips, p(u→v) = trips / out-strength. With equal weights, ours reproduces the
+  built-in exactly (a unit test asserts it to 10⁻¹²), so the difference between them is purely the weights.
+
+The two rankings agree broadly (Spearman ρ = 0.91), but only 10 of the top 20 are shared:
+
+- **Rises with weights:** Melrose Ave & E 150 St in the Bronx climbs from rank 930 to 64. It has few distinct routes
+  but heavy local traffic.
+- **Falls with weights:** Jay St & Tech Pl drops from 49 to 663. It connects to many stations, but each route carries
+  few trips.
+
+The weighted top 10 are real hubs: Bedford Ave (Williamsburg), Chelsea Piers, W 21 St, Atlantic Terminal (Hanson
+Pl), Columbus Circle (Broadway & W 58 St), Union Square (E 17 St) and Penn Station (9 Ave & W 33 St, W 31 St & 7 Ave).
+
+**Q42. What do the damping factor and dangling vertices mean?**
+- **Damping.** With probability α = 0.15 the random rider "teleports" to a random station instead of riding on
+  (damping 0.85). This guarantees convergence and a minimum rank for every station.
+- **Dangling vertices.** These have no outgoing route; we have 78. They pass nothing on, so their mass leaks. As GraphX
+  does, we renormalize the ranks to sum to 1 at the end.
+
+**Q43. What did the morning-vs-evening PageRank show?**
+We ran the same weighted PageRank on working-day 07–10 trips only, then on 16–19 trips only, and defined
+`pr_shift = (am − pm) / (am + pm)`:
+
+- **+1** means a morning magnet: riders arrive there in the morning (offices).
+- **−1** means an evening magnet: riders arrive there in the evening (homes).
+
+Of the 50 stations with the highest morning PageRank, 84 % are in Midtown or Lower Manhattan; of the 50 highest
+evening ones, only 10 % are. The strongest morning magnets are Greenwich St & Hubert St and Park Ave by Grand Central.
+The strongest evening magnets are Grand Army Plaza, Astoria and Greenpoint.
+
+**Q44. How did you compute strength and imbalance?**
+One `aggregateMessages` pass. Every route sends its trips to its source (out-strength) and its destination
+(in-strength); a round trip goes to its own station; `mergeMsg` adds them. `TripletFields.EdgeOnly` tells GraphX
+that the function reads only the edge attribute, so vertex attributes are never shipped to the edge partitions.
+`outerJoinVertices` then attaches the sums to the stations. The biggest four-month sink is Greenwich St & W Houston
+St (+2,383); the biggest source is E 33 St & Park Ave (−2,445).
+
+**Q45. How do your communities work, and what is modularity?**
+
+*How they are built*
+
+1. Label propagation runs in Pregel on the strong-tie graph: 17,541 ties, where a tie means at least 20 trips and
+   being among one of the two stations' top-10 destinations.
+2. Every station starts with its own label and repeatedly adopts the label carrying the most trips among its
+   neighbours. A tie keeps the current label, otherwise the smallest label wins.
+3. Stations take turns by id parity, which damps the flip-flopping of synchronous label propagation.
+
+That gives 59 communities with Q = 0.702. GraphX's unweighted built-in LabelPropagation scored higher (Q = 0.734),
+because label propagation stops at a local optimum.
+
+4. So we add a greedy modularity merge (Clauset–Newman–Moore). It repeatedly joins the two linked communities whose
+   union raises Q the most, ΔQ = w_ab/m − D_a·D_b/(2m²), until no merge helps.
+
+*Result:* 15 communities, Q = 0.788, covering 93 % of stations.
+
+*What modularity means.* Q = Σ_c [ L_c/m − (D_c/2m)² ] measures how much more trip weight falls inside communities
+than a random graph with the same degrees would put there.
+
+*Why we believe the communities.* They are recognisable districts: the Bronx, Park Slope and Prospect Park, Jackson
+Heights, Bushwick, Astoria and LIC, Midtown, Williamsburg, Downtown Brooklyn, Bay Ridge. Governors Island is a
+community of its own. A station is a median 1.7 km from its community's centre, against 6.6 km with shuffled labels.
+
+**Q46. Connected vs strongly connected components: what did you find?**
+- **Weakly connected** (direction ignored): one component; every station is linked to every other.
+- **Strongly connected** (directions respected): a giant component of 2,412 stations plus 78 singletons, the 78
+  stations riders only arrive at.
+  - 77 of them are Jersey City and Hoboken stations: NYC riders end trips there, but trips starting there are in
+    Citi Bike's separate Jersey City dataset, which we did not load.
+  - The 78th, Bay St & Court St in Red Hook, received exactly one trip in four months.
+
+That is a data-coverage finding we would not have seen without SCC.
+
+**Q47. Triangles and the clustering coefficient?**
+A triangle is three stations that are strongly tied pairwise. A station's local clustering coefficient,
+2T / (d·(d − 1)), is the share of its strong-neighbour pairs that are tied to each other. The network has 26,995
+triangles. Average clustering is 0.31, against 0.006 for a random graph of the same density, so strong ties are
+local and neighbourhood-shaped.
+
+**Q48. ShortestPaths vs your Pregel SSSP?**
+- **GraphX `ShortestPaths`** counts hops to landmark vertices. To the top-10 hubs along strong ties: 481 stations are
+  1 hop away, 525 are 2 and 675 are 3; 179 cannot reach a hub at all.
+- **Our Pregel SSSP** is weighted. It is Bellman-Ford with one relaxation round per superstep, run from 20 landmarks
+  at once: each vertex holds a map from landmark to best seconds. It uses routes with ≥ 10 trips, each weighted by
+  its median ride time, and takes 6.5 s.
+
+From the median landmark, 270 stations are within 15 minutes by bike. Those travel times feed the isochrone map.
+
+**Q49. What does personalized PageRank answer, and how did you compute 20 at once?**
+It is the same random walk, but teleports always return to the starting station. So it answers "of riders who
+start here, where do they end up?". Every vertex carries a 20-element rank vector, one entry per landmark, and a
+single Pregel run (27 s) computes all 20. For example, riders from Queens Plaza most often end up at 1 Ave & E 62
+St, across the Queensboro Bridge.
+
+**Q50. Why must `partitionBy` come before `groupEdges`?**
+`groupEdges` merges parallel edges only within one partition. `partitionBy` sends all edges with the same (src,
+dst) to the same partition, because every strategy is a function of the two ids. Our operator tour splits each route
+into AM, PM and other edges (2,206,763 parallel edges), partitions them, merges them back into 1,305,668 routes, and
+asserts the trip total is unchanged.
+
+**Q51. Pregel has no hook between supersteps. How does the website show every superstep?**
+The `Program` (vprog, sendMsg, mergeMsg) is a plain serializable value. GraphX runs it once on the neighbourhood,
+then the driver replays the same functions under Pregel's activation rules and records every superstep. The job
+asserts that the replay ends in exactly GraphX's state, so the step-through is the real algorithm, not an animation.
+
+**Q52. A Scala gotcha from this phase?**
+`Graph(vertices, edges, edgeStorageLevel = ..., vertexStorageLevel = ...)` failed with *"Cannot throw exception
+because x$5 is null"*. With named arguments, scalac typed the default `defaultVertexAttr: VD =
+null.asInstanceOf[VD]` with VD = `Nothing`, and casting null to `Nothing` compiles to `throw null`. The fix was
+explicit type arguments, `Graph[StationAttr, RouteAttr](...)`. It is a Unit II lesson on type inference and the
+bottom type `Nothing`.
