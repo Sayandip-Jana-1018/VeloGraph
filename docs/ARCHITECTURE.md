@@ -257,13 +257,17 @@ is_holiday`, for `velograph.calendar.from..to`.
 Lake tables are always read with their declared schema (`TripSchemas`): Parquet keeps column types, but partition
 column types would otherwise be guessed from folder names (`ym=202609` reads back as an integer).
 
-**gold.station_hour** — complete panel of stations × hours with zero fill (≈ 2.3k × 2,928 ≈ 6.7M rows):
-`station_id, ts_hour, date (partition), hour, dow, is_weekend, is_holiday, departures, arrivals, net_flow
+**gold.station_hour** — complete panel of stations × hours with zero fill, 6,879,984 rows for 2,490 stations ×
+2,928 hours: `station_id, ts_hour, hour, dow, is_weekend, is_holiday, departures, arrivals, net_flow
 (= arrivals − departures), dep_member, dep_casual, dep_ebike, arr_ebike, avg_dep_duration_s, temp_c,
-apparent_temp_c, precip_mm, wind_kmh, humidity_pct, cloud_pct, weather_code`.
+apparent_temp_c, precip_mm, wind_kmh, humidity_pct, cloud_pct, weather_code, is_raining, date (partition)`.
+Each station gets rows only between its first and last day with a trip, so stations that opened or closed during the
+summer are not padded with invented zero-demand hours. Totals are reconciled with the trips on every run.
 
-**gold.route_edges** — `src_id, dst_id, trips, trips_am_peak (weekday 07–10), trips_pm_peak (weekday 16–19),
-trips_weekend, median_duration_s, member_share, ebike_share`.
+**gold.route_edges** — `src_id, dst_id, trips, trips_am_peak, trips_pm_peak, trips_weekend, median_duration_s,
+member_share, ebike_share, is_self_loop`; 1,308,071 directed pairs. Peaks count working days only (no weekend, no
+holiday) in the `velograph.gold.peaks` windows (07:00–09:59 and 16:00–18:59); `trips_weekend` counts Saturdays and
+Sundays.
 
 **gold.station_profiles** — `station_id, window_id, how (hour-of-week 0..167), dep_mean, arr_mean, dep_std, n_weeks`
 (holidays excluded).
@@ -448,7 +452,7 @@ Static exports are written to `data/serving/` and copied into `web/public/data/`
 | File | Producer | Page |
 |---|---|---|
 | `overview.json`, `hero-trips.json` (one real evening, sampled) | ServingExportJob | Home |
-| `insights/<id>.json` | InsightsJob | Insights |
+| `insights/<id>.json`, `insights/index.json` | InsightsJob | Insights |
 | `rdd-fundamentals.json`, `dq-report.json`, `jobs/*.json` | batch jobs | Cluster |
 | `network-nodes.json`, `network-flows.json`, `network-communities.json`, `network-paths.json` | GraphMetricsJob | Network |
 | `archetypes.json`, `ml-regression.json`, `ml-classification.json`, `ml-ablation.json`, `ml-correlation.json`, `model-cards.json` | ML Lab + jobs | Models |
@@ -503,7 +507,10 @@ appears and the Live page switches to recorded replay automatically.
 ## 12. Configuration, ports & environments
 
 Configuration precedence: `spark/src/main/resources/application.conf` (defaults) ← `conf/<mode>.conf` ←
-`VELOGRAPH_*` environment variables.
+`VELOGRAPH_*` environment variables. Domain settings live there too: `velograph.dq` (silver quality rules),
+`velograph.calendar` (date dimension span), `velograph.gold.panel` (the Jun–Sep span of gold tables and insights),
+`velograph.gold.peaks` (commute windows) and `velograph.rdd-demo.month`. Event logs record block updates
+(`spark.eventLog.logBlockUpdates.enabled`), so the history server's Storage tab shows what each job cached.
 
 Dev-mode Spark settings: `spark.master=local[20]`, `spark.sql.shuffle.partitions=96`,
 `spark.sql.session.timeZone=America/New_York`, `spark.serializer=KryoSerializer`, `spark.eventLog.enabled=true`

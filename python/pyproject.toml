@@ -14,10 +14,18 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.3", "ruff>=0.9"]
+dev = [
+    "playwright>=1.49",
+    "pytest>=8.3",
+    "ruff>=0.9",
+]
 spark = ["pyspark==3.5.8", "pyarrow>=17", "pandas>=2.2", "numpy>=1.26"]
 lab = ["jupyterlab>=4.3", "ipykernel>=6.29", "matplotlib>=3.9", "seaborn>=0.13"]
 api = ["fastapi>=0.143", "uvicorn[standard]>=0.34", "sse-starlette>=2.2"]
+
+[tool.uv]
+# Install every group by default: a plain `uv sync` or `uv add` must never remove PySpark or the lab tools.
+default-groups = ["dev", "spark", "lab", "api"]
 
 [build-system]
 requires = ["hatchling>=1.27"]

@@ -107,4 +107,18 @@ class ReferenceTablesSpec extends AnyFunSuite with SharedSparkSession {
     assert(days("2026-07-04").getAs[Boolean]("is_holiday") && days("2026-07-04").getAs[Boolean]("is_weekend"))
     assert(days("2026-07-06").getAs[Int]("dow") == 1 && !days("2026-07-06").getAs[Boolean]("is_holiday"))
   }
+
+  private def namesAndTypes(schema: org.apache.spark.sql.types.StructType) =
+    schema.map(f => f.name -> f.dataType)
+
+  test("the stations, weather and calendar writers produce exactly their LakeSchemas") {
+    import velograph.testkit.Fixtures
+    assert(namesAndTypes(Fixtures.stations(spark).schema) == namesAndTypes(LakeSchemas.SilverStation))
+    assert(namesAndTypes(Fixtures.calendar(spark).schema) == namesAndTypes(LakeSchemas.SilverCalendar))
+    val weatherRaw = spark.read.schema(TripSchemas.OpenMeteoHourly).json(spark.emptyDataset[String](
+      org.apache.spark.sql.Encoders.STRING
+    ))
+    assert(namesAndTypes(WeatherTransforms.hourly(weatherRaw).schema) ==
+      namesAndTypes(LakeSchemas.SilverWeatherHourly))
+  }
 }

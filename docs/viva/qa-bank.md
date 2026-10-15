@@ -139,3 +139,67 @@ showed as 09:30. Rule since then: format timestamps inside Spark with `date_form
 Parquet files store their column types, but partition columns live in folder names, and Spark guesses their type:
 `ym=202609` came back as an integer and broke the reconciliation. Declared schemas (`TripSchemas`) fix the types of
 partition columns too.
+
+---
+
+## P2 · Gold tables, RDD fundamentals, Spark SQL
+
+**Q26. What is the gold station × hour panel, and why "zero-filled"?**
+One row per station per hour with its departures, arrivals, net flow, weather and calendar flags: 6,879,984 rows for
+2,490 stations over 2,928 hours. A plain `groupBy` only returns hours that had a trip, but a demand model must also
+learn from the 44.7 % of station-hours with no departures at all, so we cross-join stations with hours and left-join
+the counts in. A station only gets rows between its first and last day with a trip, so a station that opened in
+August is not padded with three months of fake zeros.
+
+**Q27. How do you know the panel is right?**
+Every run reconciles it: the panel's 20,528,041 departures and 20,528,595 arrivals must equal the trip counts for
+the same span, or the job fails. Unit tests check a hand-made trip that ends after midnight on the last day: its
+departure counts, its arrival (outside the span) does not.
+
+**Q28. Show us a narrow and a wide transformation.**
+`map` and `filter` are narrow: each output partition depends on one input partition, so they run in the same stage.
+`reduceByKey`, `groupByKey` and `join` are wide: they need records with the same key together, so Spark shuffles
+data between executors and starts a new stage. In the Spark UI DAG (`docs/assets/spark-ui/02-...png`) the arrow
+from stage 13 to stage 14 is that shuffle.
+
+**Q29. Why is `reduceByKey` better than `groupByKey`?**
+`reduceByKey` combines values inside each partition before the shuffle. Counting departures per station over
+4,979,938 September trips, `groupByKey` shuffled all 4,979,938 records (12.5 MB); `reduceByKey` shuffled only
+69,390 partial sums (0.73 MB), 17 times less. The answers were identical.
+
+**Q30. What are shared variables?**
+Broadcast variables and accumulators. A broadcast ships read-only data (our 2.5k station names) to each executor
+once; enriching every trip with its station name that way shuffled 0 bytes, against 99 MB for a shuffle join. An
+accumulator is a counter that tasks add to and only the driver reads. Spark guarantees each update once only inside
+actions: in a `map` that two actions re-ran, our accumulator counted 9,965,720 lines instead of 4,982,860.
+
+**Q31. What do the storage levels cost and buy you?**
+Re-counting 4,979,938 parsed trips took 2,055 ms uncached, 86 ms from `MEMORY_ONLY` (1,332 MB of objects), 491 ms
+from `MEMORY_ONLY_SER` (397 MB of serialized bytes, slower because it must deserialize) and 610 ms from `DISK_ONLY`.
+That is in-memory processing (Unit I) measured.
+
+**Q32. What is lineage, and why does it make RDDs fault tolerant?**
+Each RDD remembers the transformations that built it (`toDebugString` prints them, back to the `HadoopRDD` that read
+the file). If an executor is lost, Spark recomputes only the lost partitions from that recipe, so no data has to be
+replicated.
+
+**Q33. Three ways to turn an RDD into a DataFrame?**
+`rdd.toDF()` on an RDD of case classes (column names by reflection), `spark.createDataFrame(rowRdd, schema)` with an
+explicit `StructType`, and `rdd.toDF("a", "b")` on an RDD of tuples. Our RDD job does all three and checks that the
+counts agree and that SQL over the result matches the RDD (4,045,528 member trips either way).
+
+**Q34. Walk us through one of your SQL insights.**
+Rain impact: sum departures per hour from the gold panel (working days, 07:00–20:59), join each hour to its weather,
+bucket the precipitation, average per bucket and compare with dry hours using `FIRST_VALUE(...) OVER (ORDER BY
+bucket)`. Light rain costs 8 %, moderate 33 %, heavy 69 % of trips. It uses a CTE, a join, `GROUP BY`, `ORDER BY`,
+`CASE` and a window function.
+
+**Q35. Which SQL wildcards did you use?**
+`%` matches any run of characters (`name LIKE '%Park%'`: 106 stations), `_` matches exactly one (`name LIKE 'E _
+St%'`: East streets with a one-digit number, 23 stations), plus `RLIKE` for regular expressions
+(`'^[0-9]+ Ave'`: 247 stations on numbered avenues) and `NOT LIKE '%&%'` for stations that are not street corners.
+
+**Q36. The log warns "No Partition Defined for Window operation". Is that a problem?**
+A window with no `PARTITION BY`, like `SUM(...) OVER ()` or `LAG(...) OVER (ORDER BY week)`, has to see every row,
+so Spark moves them into one partition. That would be a bottleneck on millions of rows. Ours run on at most a few
+dozen rows that are already aggregated, so it costs nothing, and the slowest insight still finishes in 11.8 s.

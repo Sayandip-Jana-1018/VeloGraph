@@ -1,0 +1,16 @@
+# Spark SQL insights (roadmap P2.4), in display order.
+# Each file starts with "-- title:", "-- question:" and "-- chart:" lines; see velograph.sql.InsightQueries.
+01_hourly_demand.sql
+02_member_vs_casual.sql
+03_top_departure_stations.sql
+04_top_routes.sql
+05_round_trip_stations.sql
+06_rain_impact.sql
+07_temperature_bands.sql
+08_weekly_ebike_share.sql
+09_station_imbalance.sql
+10_wildcard_search.sql
+11_duration_histogram.sql
+12_busiest_hour_per_station.sql
+13_week_over_week.sql
+14_ebike_vs_classic_speed.sql

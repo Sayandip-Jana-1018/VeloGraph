@@ -44,7 +44,7 @@ object SilverWeatherJob extends SparkJob {
       .write
       .mode(SaveMode.Overwrite)
       .option("partitionOverwriteMode", "static")
-      .parquet(ctx.paths.silver.resolve("weather_hourly").uri)
+      .parquet(new LakeTables(spark, ctx.paths).uri(LakeTable.WeatherHourly))
 
     val s = weather
       .agg(

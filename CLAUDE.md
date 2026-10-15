@@ -75,6 +75,9 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Trip download | `cd python; uv run python -m velograph.ingest.download_trips 202609 202606 202607 202608` |
 | ✅ Weather download | `cd python; uv run python -m velograph.ingest.download_weather --start 2026-06-01` |
 | ✅ Bronze + silver | `.\scripts\submit.ps1 bronze-trips` (`-- --months 202609`) · `silver-trips -DriverMemory 6g` · `silver-stations` · `silver-weather` · `silver-calendar` |
+| ✅ Gold, RDD, SQL | `.\scripts\submit.ps1 gold-station-hour -DriverMemory 6g` · `gold-routes` · `rdd-fundamentals` · `insights` |
+| ✅ History server | `docker compose -f infra/docker-compose.yml --profile history up -d spark-history` → http://localhost:18080 |
+| ✅ Spark UI screenshots | `cd python; uv run python -m velograph.ops.ui_screenshots` (history server up) → `docs/assets/spark-ui/` |
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
 | Batch pipeline | `.\scripts\pipeline.ps1 -Mode dev -Stages bronze,silver,gold,sql,graph,ml` |
 | Live demo | `.\scripts\demo.ps1` |
@@ -86,6 +89,9 @@ Windows gotchas, learned the hard way:
   log line; run native tools through `Invoke-Native` (see `scripts/submit.ps1`) and check `$LASTEXITCODE`.
 - In Git Bash, prefix `docker exec` with `MSYS_NO_PATHCONV=1`, or `/opt/...` becomes `C:/Program Files/Git/opt/...`.
 - Host Spark UIs use port 4050+; 4040–4042 are published by the Docker master for cluster drivers.
+- `Set-Content -Encoding utf8` in PowerShell 5.1 writes a BOM, which the Scala REPL rejects as illegal characters;
+  write files for tools with `[IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding $false))`.
+- `spark-shell -i file` stays open after the file; end rehearsal copies with `sys.exit(0)`.
 
 ## Engineering conventions
 
@@ -137,8 +143,10 @@ push without approval.
 
 ## Status
 
-- **Phase:** P1 done 15 Oct 2026 (evidence in ROADMAP): bronze 20.6M trips, silver 20.5M valid (0.379 % quarantined),
-  2,490 stations with 99.59 % GBFS match, weather and calendar. GBFS recorder keeps running in the background.
-- **Next task:** P2.1 `GoldStationHourJob` (Gate A by end of D2). Stop the Spark containers before heavy host runs.
+- **Phase:** P2 done 15 Oct 2026, **Gate A met** (evidence in ROADMAP): gold station-hour panel (6.88M rows) and route
+  edges (1.31M), RDD fundamentals with measured shuffles and caching, 14 Spark SQL insights, Spark UI screenshots and a
+  rehearsed spark-shell walkthrough. P0–P2 finished on D1, a day ahead of schedule.
+- **Next task:** P3.1 graph construction (GraphX) from `gold/route_edges` + `silver/stations`. Stop the Spark containers
+  before heavy host runs. The GBFS recorder keeps running in the background.
 - **Open questions:** none. Option for the user: raising `.wslconfig` `memory=` to 8 GB would add cluster headroom
   (ADR 009); not needed so far.

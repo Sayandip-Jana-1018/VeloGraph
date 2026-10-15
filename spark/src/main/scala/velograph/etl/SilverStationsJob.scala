@@ -71,7 +71,7 @@ object StationTransforms {
     stationInformation
       .select(explode(col("data.stations")).as("s"))
       .select(
-        SilverTripsTransforms.normalizeStationId(col("s.short_name")).as("short_name"),
+        StationIds.normalize(col("s.short_name")).as("short_name"),
         col("s.station_id").as("gbfs_station_id"),
         col("s.name").as("gbfs_name"),
         col("s.lat").as("gbfs_lat"),
@@ -115,13 +115,12 @@ object SilverStationsJob extends SparkJob {
 
   /** Newest `station_information.json` captured by the GBFS recorder (one folder per New York day). */
   private def latestStationInformation(recordings: Path): Path = {
-    val snapshots =
-      if (!Files.isDirectory(recordings)) Seq.empty
+    def snapshotOf(day: Path): Path = day.resolve("station_information.json")
+    val snapshots                   =
+      if (!Files.isDirectory(recordings)) Nil
       else {
         val days = Files.list(recordings)
-        try days.iterator().asScala.map(_.resolve("station_information.json")).filter(Files.isRegularFile(
-            _
-          )).toList
+        try days.iterator().asScala.map(snapshotOf).filter(p => Files.isRegularFile(p)).toList
         finally days.close()
       }
     snapshots.sortBy(_.getParent.getFileName.toString).lastOption.getOrElse {
@@ -139,7 +138,8 @@ object SilverStationsJob extends SparkJob {
     val snapshot = latestStationInformation(ctx.paths.raw.resolve("gbfs_recordings"))
     log.info(s"GBFS registry: $snapshot")
 
-    val trips = spark.read.schema(TripSchemas.SilverTrip).parquet(ctx.paths.silver.resolve("trips").uri)
+    val lake         = new LakeTables(spark, ctx.paths)
+    val trips        = lake.read(LakeTable.SilverTrips)
     val tripStations = StationTransforms.summarize(StationTransforms.endpoints(trips))
     val gbfs         = StationTransforms.gbfsStations(readGbfs(spark, snapshot))
     val stations     = StationTransforms.dimension(tripStations, gbfs).cache() // two writes + metrics below
@@ -149,7 +149,7 @@ object SilverStationsJob extends SparkJob {
       .write
       .mode(SaveMode.Overwrite)
       .option("partitionOverwriteMode", "static")
-      .parquet(ctx.paths.silver.resolve("stations").uri)
+      .parquet(lake.uri(LakeTable.Stations))
 
     // Match quality, weighted by trips: what share of trip endpoints the live registry knows (bounded: 1 row).
     val m = stations

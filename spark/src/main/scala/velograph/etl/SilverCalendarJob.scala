@@ -8,7 +8,6 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
 
 import velograph.common.{JobContext, SparkJob}
-import velograph.common.LakePaths.PathOps
 
 final case class Holiday(date: Date, holiday_name: String, holiday_kind: String)
 
@@ -66,14 +65,15 @@ object SilverCalendarJob extends SparkJob {
       CalendarTransforms.holidays(spark)
     )
 
+    val lake = new LakeTables(spark, ctx.paths)
     calendar
       .coalesce(1)
       .write
       .mode(SaveMode.Overwrite)
       .option("partitionOverwriteMode", "static")
-      .parquet(ctx.paths.silver.resolve("calendar").uri)
+      .parquet(lake.uri(LakeTable.Calendar))
 
-    val written  = spark.read.parquet(ctx.paths.silver.resolve("calendar").uri)
+    val written  = lake.read(LakeTable.Calendar)
     val holidays = written.where(col("is_holiday")).orderBy("date").select("date", "holiday_name").collect()
     Map(
       "days"     -> written.count(),

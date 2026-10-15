@@ -136,23 +136,35 @@ accumulators (and why they are only trustworthy inside actions).
 
 ### P2 · Gold layer, RDD fundamentals, Spark SQL — D2 → Gate A
 
-- [ ] **P2.1 `GoldStationHourJob`** — zero-filled station × hour panel (≈ 6–7M rows) with weather + calendar.
-- [ ] **P2.2 `GoldRoutesJob`** — directed route edges with AM-peak / PM-peak / weekend splits, median duration, member
+- [x] **P2.1 `GoldStationHourJob`** — zero-filled station × hour panel (≈ 6–7M rows) with weather + calendar; each
+  station only over its active span (first to last day with a trip), totals reconciled with the trips.
+- [x] **P2.2 `GoldRoutesJob`** — directed route edges with AM-peak / PM-peak / weekend splits, median duration, member
   and e-bike share.
-- [ ] **P2.3 `RddFundamentalsJob`** → `rdd-fundamentals.json`: `textFile`, `map` / `filter` / `flatMap`, `reduceByKey`
+- [x] **P2.3 `RddFundamentalsJob`** → `rdd-fundamentals.json`: `textFile`, `map` / `filter` / `flatMap`, `reduceByKey`
   vs `groupByKey` (shuffle bytes), `join`, `persist` levels with timings, lineage via `toDebugString`, broadcast lookup,
-  accumulators, RDD → DataFrame three ways (`toDF`, `createDataFrame(rdd, schema)`, case-class reflection).
-- [ ] **P2.4 `InsightsJob`** — 14 named `.sql` files → `serving/insights/<id>.json` (rows + SQL text + chart hint):
+  accumulators, RDD → DataFrame three ways (`toDF`, `createDataFrame(rdd, schema)`, case-class reflection). Shuffle
+  bytes come from task metrics through a `SparkListener` (`ShuffleMeter`) and match the Spark UI to the byte.
+- [x] **P2.4 `InsightsJob`** — 14 named `.sql` files → `serving/insights/<id>.json` (rows + SQL text + chart hint):
   1. hourly demand, weekday vs weekend · 2. member vs casual (count, median duration via `percentile_approx`, e-bike
   share) · 3. top-20 departure stations · 4. top-20 routes with names (self-join) · 5. round-trip share by station ·
   6. rain impact (join with weather) · 7. temperature bands · 8. weekly e-bike share (window) · 9. station imbalance
   ranking · 10. wildcard search (`LIKE '%Park%'`, `LIKE 'W % St'`, `RLIKE`) · 11. duration histogram & outliers ·
   12. busiest hour per station (`RANK() OVER`) · 13. week-over-week growth (`LAG`) · 14. e-bike vs classic speed.
-- [ ] **P2.5 Spark UI evidence + spark-shell walkthrough** — DAG with shuffle boundaries and Storage tab with a cached
-  RDD → `docs/assets/`; `docs/viva/spark-shell-walkthrough.md` you can type live.
+- [x] **P2.5 Spark UI evidence + spark-shell walkthrough** — DAG with shuffle boundaries and Storage tab with a cached
+  RDD → `docs/assets/`; `docs/viva/spark-shell-walkthrough.md` you can type live. Seven history-server screenshots in
+  `docs/assets/spark-ui/`, captured by `velograph.ops.ui_screenshots` (headless Edge via Playwright); the walkthrough
+  was rehearsed end to end in `spark-shell`.
 
 **Gate A:** all gold tables + 14 insight exports for Jun–Sep; every query < 60 s.
-**Evidence:** _pending_
+**Evidence (15 Oct 2026):** **Gate A met.** `gold/station_hour`: 6,879,984 rows (2,490 stations, 2,928 hours), 72 s;
+20,528,041 departures and 20,528,595 arrivals reconciled exactly with the trips; 44.7 % of station-hours have no
+departure; busiest hour 9 Ave & W 33 St, 29 Sep 17:00, 190 departures. `gold/route_edges`: 1,308,071 directed edges
+(216,418 with ≥ 20 trips, 2,403 self-loops), 62 s; the top 1 % of routes carry 22 % of trips. RDD job on Sep 2026
+(30 partitions, 4,979,938 trips): accumulator 4,982,860 inside an action vs 9,965,720 inside a re-run `map`;
+`groupByKey` shuffled 4,979,938 records / 12.5 MB vs `reduceByKey` 69,390 / 0.73 MB (17× less); shuffle join 99.1 MB
+vs broadcast 0 B; re-count 2,055 ms uncached vs 86 ms `MEMORY_ONLY` (1,332 MB) vs 491 ms `MEMORY_ONLY_SER` (397 MB)
+vs 610 ms `DISK_ONLY`. Insights: all 14 in 77 s total, slowest 11.8 s; e.g. heavy rain cuts daytime demand by 69 %.
+Tests: Scala 28/28 (all 14 queries run against a fixture lake), Python 7/7.
 🎓 Narrow vs wide transformations · jobs, stages, tasks · Catalyst & Tungsten · cache vs persist · broadcast joins ·
 RDD vs DataFrame vs Dataset.
 

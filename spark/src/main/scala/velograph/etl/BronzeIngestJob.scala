@@ -58,13 +58,17 @@ object BronzeIngestJob extends SparkJob {
       .option("pathGlobFilter", "*.csv")
       .csv(months.map(ym => rawRoot.resolve(ym).uri): _*)
 
-    val target = ctx.paths.bronze.resolve("trips").uri
-    BronzeTransforms.withIngestMetadata(raw).write.mode(SaveMode.Overwrite).partitionBy("ym").parquet(target)
+    val lake = new LakeTables(spark, ctx.paths)
+    BronzeTransforms
+      .withIngestMetadata(raw)
+      .write
+      .mode(SaveMode.Overwrite)
+      .partitionBy("ym")
+      .parquet(lake.uri(LakeTable.BronzeTrips))
 
     // Reconciliation with the downloader's counts: at most one row per month comes back to the driver.
-    val counted = spark.read
-      .schema(TripSchemas.BronzeTrip)
-      .parquet(target)
+    val counted = lake
+      .read(LakeTable.BronzeTrips)
       .where(col("ym").isin(months: _*))
       .groupBy("ym")
       .agg(count(lit(1)).as("rows"), count(col(TripSchemas.CorruptRecord)).as("malformed"))

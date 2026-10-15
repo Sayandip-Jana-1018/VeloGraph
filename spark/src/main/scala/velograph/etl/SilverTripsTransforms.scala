@@ -85,14 +85,9 @@ object SilverTripsTransforms {
   }
 
   /**
-   * Citi Bike station ids always carry two decimals (`5980.10`), but about 1 % of trip records lost the
-   * trailing zero on the way to CSV (`5980.1`): 100 ids in Jun-Sep 2026. Left alone, one station would become
-   * two graph vertices and miss its GBFS match, so a single decimal digit gets its zero back.
+   * Bronze strings -> typed columns. Anything unparseable becomes null and is caught by [[rejectReason]];
+   * station ids are normalised (see [[StationIds]]).
    */
-  def normalizeStationId(id: Column): Column =
-    when(id.rlike("^\\d+\\.\\d$"), concat(id, lit("0"))).otherwise(id)
-
-  /** Bronze strings -> typed columns. Anything unparseable becomes null and is caught by [[rejectReason]]. */
   def parse(bronze: DataFrame): DataFrame =
     bronze.select(
       text("ride_id").as("ride_id"),
@@ -100,9 +95,9 @@ object SilverTripsTransforms {
       lower(text("member_casual")).as("member_casual"),
       text("started_at").cast(TimestampType).as("started_at"),
       text("ended_at").cast(TimestampType).as("ended_at"),
-      normalizeStationId(text("start_station_id")).as("start_station_id"),
+      StationIds.normalize(text("start_station_id")).as("start_station_id"),
       text("start_station_name").as("start_station_name"),
-      normalizeStationId(text("end_station_id")).as("end_station_id"),
+      StationIds.normalize(text("end_station_id")).as("end_station_id"),
       text("end_station_name").as("end_station_name"),
       text("start_lat").cast(DoubleType).as("start_lat"),
       text("start_lng").cast(DoubleType).as("start_lng"),
