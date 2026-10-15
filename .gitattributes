@@ -1,0 +1,14 @@
+# LF everywhere (shell scripts run inside Linux containers); CRLF only for Windows scripts.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.pptx binary
+*.docx binary
+*.zip binary
+*.jar binary
