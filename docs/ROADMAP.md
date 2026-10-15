@@ -99,26 +99,38 @@ controller · why KRaft replaced ZooKeeper.
 
 Goal: trusted, typed trips with a measurable data-quality report.
 
-- [ ] **P1.1 Trip downloader** — `velograph.ingest.download_trips`: resumable HTTP Range downloads, size/ETag check,
+- [x] **P1.1 Trip downloader** — `velograph.ingest.download_trips`: resumable HTTP Range downloads, size/ETag check,
   unzip (skip `__MACOSX`), `data/raw/citibike/manifest.json`. Order: 2026-09 first (dev slice), then 2026-06..08 in the
-  background (≈ 4 GB total).
-- [ ] **P1.2 Weather + calendar** — Open-Meteo hourly archive for Central Park (40.7812, −73.9665), 1 Jun → today,
-  `timezone=America/New_York`; holidays CSV (Fri 19 Jun, Fri 3 Jul observed, Mon 7 Sep, Mon 12 Oct).
+  background (≈ 4 GB total). 20,606,696 rows in 22 CSV parts (3.8 GB) in 30 min; S3 dropped the June transfer at
+  226 MB once and the downloader resumed from that byte.
+- [x] **P1.2 Weather + calendar** — Open-Meteo hourly archive for Central Park (40.7812, −73.9665), 1 Jun → yesterday,
+  `timezone=America/New_York` (`velograph.ingest.download_weather`): 3,240 hours, 1 Jun – 13 Oct, no gaps.
+  `SilverCalendarJob` builds `silver/calendar` (214 days, Jun–Dec) from the US federal holidays bundled in the jar,
+  flagging both 3 Jul (observed) and 4 Jul.
 - [x] **P1.3 Station information snapshot** — GBFS `station_information` (capacity, coordinates, `short_name` ↔ UUID).
   Captured once per NYC day by the recorder (P1.4): 2,519 stations on 14 Oct 2026.
 - [x] **P1.4 GBFS recorder** *(approved 15 Oct; runs in the background while the laptop is awake)* — polls every 60 s
   (the feed's ttl), writes changed stations only plus periodic snapshots, gzipped JSONL per NYC day, and Open-Meteo
   current weather every 15 min. Feeds the offline demo and the live backtest (P7.4). Control: `scripts/recorder.ps1`.
   First 24 min: 1 snapshot (2,519 stations, 68 KB) + 11 deltas averaging 461 changed stations, ≈ 12 MB/day.
-- [ ] **P1.5 `BronzeIngestJob`** — explicit schema, `_source_file`, `_ingested_at`, partitioned by `ym`.
-- [ ] **P1.6 `SilverTripsJob`** — typing, duration/distance/speed, DQ rules with reason codes → quarantine, dedupe on
-  `ride_id`, accumulators → `serving/dq-report.json`.
-- [ ] **P1.7 `SilverStationsJob` + `SilverWeatherJob`** — station dimension (median coordinates, first/last seen, GBFS
+- [x] **P1.5 `BronzeIngestJob`** — explicit all-text schema with `_corrupt_record`, `_source_file`, `_ingested_at`,
+  partitioned by `ym`; reconciles its per-month row counts with the downloader's manifest and fails on any difference.
+- [x] **P1.6 `SilverTripsJob`** — typing, duration/distance/speed, 15 DQ rules with reason codes → quarantine, dedupe
+  on `ride_id`, station-id normalisation → `serving/dq-report.json`. Reason counts come from exact aggregations;
+  accumulators are shown where Spark guarantees them (inside an action, P2.3).
+- [x] **P1.7 `SilverStationsJob` + `SilverWeatherJob`** — station dimension (median coordinates, first/last seen, GBFS
   capacity/UUID join) and the hourly weather table.
 
 **Acceptance:** Sep slice bronze → silver < 10 min on host; quarantine < 2 %; ≥ 95 % of trip station ids resolve to
 GBFS; Jun–Sep fully processed.
-**Evidence:** _pending_
+**Evidence (15 Oct 2026):** Sep slice bronze 30 s + silver 80 s on host `local[20]`. Full run: bronze 20,606,696 rows
+(Jun 5,384,468 · Jul 4,993,137 · Aug 5,246,236 · Sep 4,982,855; 0 malformed lines; reconciled with the manifest) in
+69 s; silver 20,528,598 valid trips, **0.379 % quarantined** (missing end coordinates 49,559 · longer than 4 h 16,590 ·
+e-bike without start GPS 11,945 · impossible speed 4) in 3 min 10 s. Station ids: 100 ids lost their trailing zero
+in 378,743 trip endpoints (`5980.1` = `5980.10`), and GBFS itself stores 3 that way; normalising both sides merged
+97 duplicate stations (2,587 → 2,490) and raised the GBFS endpoint match from 98.88 % to **99.59 %** (2,463 of 2,490
+stations; the other 27 have closed). Valid trips: 72.8 % e-bike, 79.7 % member, 2.2 % round trips, median ride
+9.5 min / 1.56 km. Tests: Scala 15/15, Python 7/7.
 🎓 Parquet (columnar, compression, predicate pushdown) · partitioning & pruning · schema-on-read · lazy evaluation ·
 accumulators (and why they are only trustworthy inside actions).
 

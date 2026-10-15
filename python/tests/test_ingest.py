@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from velograph.ingest.download_trips import RemoteArchive, count_rows
+from velograph.ingest.download_weather import coverage
 from velograph.ingest.gbfs import select_changes
 from velograph.ingest.gbfs_recorder import append_jsonl_gz
 
@@ -51,6 +52,16 @@ def test_count_rows_excludes_header_and_handles_missing_final_newline(tmp_path: 
     csv = tmp_path / "trips.csv"
     csv.write_bytes(b"ride_id,member_casual\nA,member\nB,casual")
     assert count_rows(csv) == 2
+
+
+def test_weather_coverage_ignores_trailing_hours_without_values():
+    payload = {"hourly": {"time": ["d0T00:00", "d0T01:00", "d0T02:00"], "temperature_2m": [20.1, 19.5, None]}}
+    assert coverage(payload) == {
+        "hoursReturned": 3,
+        "hoursWithValues": 2,
+        "firstHour": "d0T00:00",
+        "lastHour": "d0T01:00",
+    }
 
 
 def test_md5_is_only_trusted_for_single_part_etags():
