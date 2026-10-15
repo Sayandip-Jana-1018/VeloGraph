@@ -10,6 +10,7 @@ Usage (history server on :18080; from ``python/``)::
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import urllib.request
@@ -57,6 +58,18 @@ class HistoryApi:
         writers = [sid for sid in job["stageIds"] if stages.get(sid, {}).get("shuffleWriteBytes", 0) > 0]
         return max(writers, key=lambda sid: stages[sid]["shuffleWriteBytes"])
 
+    def superstep_page(self, app: str, page_size: int) -> int:
+        """The jobs-list page (newest first) that shows the supersteps of the job's first Pregel run.
+
+        Every Pregel superstep is one `isEmpty` Spark job, and the first run is weighted PageRank.
+        """
+        jobs = self.get(f"/applications/{app}/jobs")
+        steps = sorted(j["jobId"] for j in jobs if j["name"].startswith("isEmpty at Pregel"))
+        # Consecutive superstep jobs form one run; other jobs separate the runs.
+        last_of_first_run = next((a for a, b in itertools.pairwise(steps) if b != a + 1), steps[-1])
+        newest = max(j["jobId"] for j in jobs)
+        return (newest - last_of_first_run) // page_size + 1
+
     def richest_sql_execution(self, app: str) -> int:
         """The SQL execution whose plan shows the most shuffles (Exchange nodes)."""
         executions = self.get(f"/applications/{app}/sql?details=true&planDescription=false")
@@ -71,6 +84,10 @@ def plan(api: HistoryApi) -> list[Shot]:
     grouped, reduced = api.job_for_group(rdd, "groupByKey"), api.job_for_group(rdd, "reduceByKey")
     sql_app = api.latest_app("velograph-insights")
     execution = api.richest_sql_execution(sql_app)
+    graph = api.latest_app("velograph-graph-metrics")
+    supersteps = (
+        f"/history/{graph}/jobs/?completedJob.pageSize=40&completedJob.page={api.superstep_page(graph, 40)}"
+    )
     stage = f"/history/{rdd}/stages/stage/?attempt=0&id="
     return [
         Shot("01-history-applications.png", "/", wait_for="#history-summary"),
@@ -84,6 +101,9 @@ def plan(api: HistoryApi) -> list[Shot]:
             f"/history/{sql_app}/SQL/execution/?id={execution}",
             wait_for="#plan-viz-graph svg",
         ),
+        # P3: Pregel runs one Spark job per superstep, so weighted PageRank shows as a wall of `isEmpty` jobs.
+        # (The history server keeps DAGs only for an app's newest 1,000 stages: too few for a superstep DAG.)
+        Shot("08-graphx-pregel-supersteps.png", supersteps, wait_for="#completedJob-table"),
     ]
 
 

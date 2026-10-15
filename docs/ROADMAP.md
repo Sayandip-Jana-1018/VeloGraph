@@ -170,22 +170,59 @@ RDD vs DataFrame vs Dataset.
 
 ### P3 · GraphX network intelligence — D3
 
-- [ ] **P3.1 Graph construction** — stations → `VertexRDD` (`VertexId` = `xxhash64(station_id)`, uniqueness
+- [x] **P3.1 Graph construction** — stations → `VertexRDD` (`VertexId` = `xxhash64(station_id)`, uniqueness
   asserted), routes → `EdgeRDD`, `EdgePartition2D`, Kryo; graph stats (V, E, density, degree distribution).
-- [ ] **P3.2 PageRank** — weighted PageRank written with the Pregel API + built-in `pageRank`; Spearman ρ between them.
-- [ ] **P3.3 Morning vs evening** — weighted PageRank on weekday 07–10 and 16–19 subgraphs → `pr_shift`.
-- [ ] **P3.4 Flow strength & imbalance** — `aggregateMessages`, `outerJoinVertices`.
-- [ ] **P3.5 Communities** — weighted label propagation (Pregel, deterministic ties) on the strong-edge subgraph +
-  built-in `LabelPropagation` baseline; modularity Q for both.
-- [ ] **P3.6 Structure** — connected & strongly connected components; triangle count → local clustering coefficient.
-- [ ] **P3.7 Paths** — `ShortestPaths` hops to the top-10 hubs; Pregel SSSP weighted by median ride time from 20
+- [x] **P3.2 PageRank** — weighted PageRank written with the Pregel API + built-in `pageRank`; Spearman ρ between them.
+- [x] **P3.3 Morning vs evening** — weighted PageRank on weekday 07–10 and 16–19 subgraphs → `pr_shift`.
+- [x] **P3.4 Flow strength & imbalance** — `aggregateMessages`, `outerJoinVertices`.
+- [x] **P3.5 Communities** — weighted label propagation (Pregel, deterministic ties) on the strong-edge subgraph +
+  built-in `LabelPropagation` baseline; modularity Q for both. Added: a greedy modularity merge
+  (Clauset–Newman–Moore) on top, because label propagation alone scored below the baseline.
+- [x] **P3.6 Structure** — connected & strongly connected components; triangle count → local clustering coefficient.
+- [x] **P3.7 Paths** — `ShortestPaths` hops to the top-10 hubs; Pregel SSSP weighted by median ride time from 20
   landmarks; personalized PageRank for landmarks.
-- [ ] **P3.8 Outputs + tests** — `lake/graph/station_metrics`, `network-*.json`; ScalaTest on toy graphs with known
-  answers.
+- [x] **P3.8 Outputs + tests** — `lake/graph/station_metrics`, `network-*.json`; ScalaTest on toy graphs with known
+  answers. Also: the GraphX operator tour (G10), a superstep-by-superstep Pregel explainer for the `pregel` portal,
+  a Spark UI screenshot of the supersteps and a rehearsed GraphX spark-shell walkthrough.
 
 **Acceptance:** top hubs are recognisable transit/office hubs; communities are spatially coherent; morning sinks
 concentrate in Midtown/FiDi; tests green.
-**Evidence:** _pending_
+
+**Evidence (15 Oct 2026):** **acceptance met.** `GraphMetricsJob` runs in 6.0 min on host `local[20]`.
+
+- **Graph:** 2,490 stations and 1,305,668 routes plus 2,403 round-trip self-loops (20.5M trips). Density 0.21,
+  reciprocity 74 %, 78 dangling stations.
+- **Vertex cut** (16 partitions): EdgePartition2D needs 6.9 copies per vertex (bound 7) against 15.6 for random,
+  canonical-random and 1D cuts; edge imbalance 1.13.
+- **Weighted PageRank** (Pregel, tol 1e-4): converged in 49 supersteps (40 s); all 2,490 vertices active until the
+  last few supersteps (2,401, then 2,076). Spearman ρ against the built-in = 0.91, top-20 overlap 10/20.
+- **Top hubs:** Bedford Ave/Metropolitan (Williamsburg), Chelsea Piers, W 21 St & 6 Ave, Atlantic Terminal (Hanson
+  Pl), Columbus Circle, Union Square, Penn Station (9 Ave & W 33 St, W 31 St & 7 Ave).
+- **AM vs PM:** 84 % of the 50 highest AM-PageRank stations are in Midtown or Lower Manhattan, against 10 % of the 50
+  highest PM ones.
+- **Communities:**
+
+  | Method | Communities | Q |
+  |---|---|---|
+  | Weighted label propagation | 59 | 0.702 |
+  | Built-in `LabelPropagation` | 36 | 0.734 |
+  | Label propagation + 55 modularity merges | **15** | **0.788** |
+
+  The final 15 are recognisable districts, and Governors Island is its own community. They cover 93 % of stations.
+  Median distance to the community centre is 1.7 km, against 6.6 km with shuffled labels.
+- **Components:** one weakly connected component. Strongly connected: a giant component of 2,412 stations plus 78
+  arrival-only stations, 77 of them Jersey City or Hoboken (their departures are in the separate JC dataset).
+- **Triangles:** 26,995 on the strong graph; average clustering 0.31 against 0.006 for a random graph of the same
+  density.
+- **Paths:** hops to the 10 hubs: 1 → 481, 2 → 525, 3 → 675 stations, 179 unreachable; travel-time SSSP from 20
+  landmarks in 6.5 s (median: 270 stations within 15 min); personalized PageRank for all 20 landmarks in one Pregel
+  run (27 s).
+- **Operator tour:** 13 operators, every claim asserted, e.g. `groupEdges` merges 2,206,763 parallel edges back into
+  1,305,668.
+- **Explainer:** 46 supersteps recorded; the driver replay equals GraphX's final state.
+- **Event log:** 22 MB with block-update logging off and zstd compression (it was 1.1 GB).
+- **Tests:** Scala 45/45, including 17 new GraphX tests (toy graphs + a synthetic city); Python 7/7.
+
 🎓 Property graph · vertex-cut partitioning · Pregel supersteps (vprog / sendMsg / mergeMsg) · PageRank & damping · why
 weights change rankings · LPA & modularity · triangles & clustering coefficient.
 
@@ -237,24 +274,34 @@ micro-batches & triggers · event vs processing time · watermarks · output mod
 
 ### P6 · Web experience — D6–D7 → Gate C
 
-- [ ] **P6.1 Foundation** — Next.js 16 (App Router, TS strict), Tailwind 4, shadcn/ui, Geist, motion; "Nocturne"
-  design tokens (palette validated with the `dataviz` skill); app shell with ⌘K station search; zod contracts;
-  `sync-web-data` script.
-- [ ] **P6.2 `/` Home** — night-time trip replay hero (deck.gl TripsLayer on one real evening), KPI band, scroll story
-  of the pipeline.
-- [ ] **P6.3 `/live`** — risk map with pulsing halos, alert ticker (SSE), KPIs, station drawer (status, forecast,
-  archetype, community, PageRank), suggested moves as arcs, live/replay toggle.
-- [ ] **P6.4 `/network`** — PageRank map, AM ↔ PM morph slider, communities, top flows, travel-time isochrones,
-  algorithm explainers.
-- [ ] **P6.5 `/models`** — leaderboards vs baselines, confusion matrix, predicted vs actual, residuals, importances,
-  ablation, archetype profiles + PCA, heat map.
-- [ ] **P6.6 `/insights`** — insight cards with charts and "View SQL".
-- [ ] **P6.7 `/cluster` + `/syllabus`** — live topology (brokers, partitions, leaders, ISR; Spark master, workers,
-  apps), job timeline; traceability table.
-- [ ] **P6.8 Polish** — ≥ 1280 px primary + tablet, WCAG AA contrast, reduced motion, loading/empty/error/offline
-  states, Lighthouse ≥ 90 on non-map pages.
+Design: "Inkglass" with one evidence portal per module ([ADR 011](adr/011-inkglass-design-and-portals.md)).
+Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink annotations; data marks stay exact.
 
-**Gate C:** every page renders real exports; the site works with the gateway down; the production build passes.
+- [ ] **P6.1 Foundation** — Next.js 16 (App Router, TS strict), Tailwind 4, shadcn/ui, motion, roughjs,
+  rough-notation, perfect-freehand; Inkglass tokens for the canvas, glass, clay and ink layers (palette validated
+  with the `dataviz` skill); fonts via `next/font`; app shell with ⌘K station search; zod contracts for every
+  serving file; `sync-web-data` script.
+- [ ] **P6.2 Portal system** — `@portal` parallel + intercepting routes (`/portal/<id>`); the portal layout (header
+  chips + source, hero, acts, "How Spark did it" code panel, "Say it in the viva" sticky note, numbers ledger); ink
+  kit (sketch frames, notations, freehand arrows, sticky notes, stickers, tape); clay kit (toggle, segmented control,
+  slider/knob, stepper, KPI puck).
+- [ ] **P6.3 Portals for P1–P3** — `lake` (medallion + DQ funnel), `rdd-lab` (shuffle duel, persistence race,
+  accumulator trap, lineage sketch, RDD → DataFrame), `sql` (14 insight cards + View SQL), `spark-ui` (pinned
+  screenshots with callouts), `pregel` (superstep step-through), `network` (PageRank map, AM ↔ PM morph, communities,
+  components, triangles, isochrones, "where riders go"), `graph-ops` (operator cards, vertex-cut comparison).
+- [ ] **P6.4 `/` Home** — night-time trip replay hero (deck.gl TripsLayer on one real evening), KPI band, scroll story
+  of the pipeline whose chapters open the portals.
+- [ ] **P6.5 `/live` + `streaming` portal** — risk map with pulsing halos, alert ticker (SSE), KPIs, station drawer
+  (status, forecast, archetype, community, PageRank), suggested moves as arcs, live/replay toggle.
+- [ ] **P6.6 `/models` + `models` portal** — leaderboards vs baselines, confusion matrix, predicted vs actual,
+  residuals, importances, ablation, archetype profiles + PCA, heat map.
+- [ ] **P6.7 `/cluster` + `/syllabus`** — live topology (brokers, partitions, leaders, ISR; Spark master, workers,
+  apps), job timeline; traceability table in which every row opens its portal.
+- [ ] **P6.8 Polish** — ≥ 1280 px primary + tablet, WCAG AA contrast, reduced motion and reduced transparency,
+  loading/empty/error/offline states, Lighthouse ≥ 90 on non-map pages.
+
+**Gate C:** every page and portal renders real exports; the site works with the gateway down; the production build
+passes.
 **Evidence:** _pending_
 
 ### P7 · Hardening & automation — D8
@@ -303,7 +350,8 @@ micro-batches & triggers · event vs processing time · watermarks · output mod
 
 ## 6. Cut list — if we fall behind
 
-Cut in this order, telling you each time: S1–S7 → `/syllabus` merges into `/cluster` → `TripReplayAnalyticsJob` (keep
+Cut in this order, telling you each time: S1–S7 → `/syllabus` merges into `/cluster` → the 14 SQL sub-portals merge
+into one gallery → `TripReplayAnalyticsJob` (keep
 the live path) → AM ↔ PM morph animation (keep static maps) → hyper-parameter grids (keep defaults + one tuned model)
 → isochrones.
 

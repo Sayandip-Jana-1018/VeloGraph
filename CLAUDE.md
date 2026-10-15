@@ -76,6 +76,7 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Weather download | `cd python; uv run python -m velograph.ingest.download_weather --start 2026-06-01` |
 | ✅ Bronze + silver | `.\scripts\submit.ps1 bronze-trips` (`-- --months 202609`) · `silver-trips -DriverMemory 6g` · `silver-stations` · `silver-weather` · `silver-calendar` |
 | ✅ Gold, RDD, SQL | `.\scripts\submit.ps1 gold-station-hour -DriverMemory 6g` · `gold-routes` · `rdd-fundamentals` · `insights` |
+| ✅ GraphX suite | `.\scripts\submit.ps1 graph-metrics -DriverMemory 6g` (~8 min) → `lake/graph/station_metrics` + `serving/network-*.json` |
 | ✅ History server | `docker compose -f infra/docker-compose.yml --profile history up -d spark-history` → http://localhost:18080 |
 | ✅ Spark UI screenshots | `cd python; uv run python -m velograph.ops.ui_screenshots` (history server up) → `docs/assets/spark-ui/` |
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
@@ -119,6 +120,9 @@ backoff on HTTP; producers flush on SIGINT; notebooks re-run cleanly top to bott
 **Web** — TypeScript strict; server components by default, client components only for maps, charts and live views;
 design tokens as CSS variables (no ad-hoc hex in components); zod-validated data loading; every view has
 loading/empty/error/offline states. Load the `dataviz` skill before writing chart code or choosing chart colours.
+Design language "Inkglass" ([ADR 011](docs/adr/011-inkglass-design-and-portals.md)): maximalist canvas, glass
+portals, neumorphic controls, hand-drawn annotations; data marks stay exact. **Everything we build is showcased in
+the UI**: each module gets an evidence portal (`/portal/<id>`), so every job should write portal-ready exports.
 
 **Naming** — Kafka topics `velograph.<domain>.<entity>.v<N>` with kebab-case segments, never `_` (Kafka metric
 names treat `.` and `_` alike); lake tables `lake/{bronze,silver,gold,graph}/<table>`;
@@ -143,10 +147,14 @@ push without approval.
 
 ## Status
 
-- **Phase:** P2 done 15 Oct 2026, **Gate A met** (evidence in ROADMAP): gold station-hour panel (6.88M rows) and route
-  edges (1.31M), RDD fundamentals with measured shuffles and caching, 14 Spark SQL insights, Spark UI screenshots and a
-  rehearsed spark-shell walkthrough. P0–P2 finished on D1, a day ahead of schedule.
-- **Next task:** P3.1 graph construction (GraphX) from `gold/route_edges` + `silver/stations`. Stop the Spark containers
-  before heavy host runs. The GBFS recorder keeps running in the background.
+- **Phase:** P3 done 15 Oct 2026 (evidence in ROADMAP), P0–P3 on D1, two days ahead of schedule. `GraphMetricsJob`
+  runs the GraphX suite in 6 min: Pregel weighted PageRank (49 supersteps, ρ = 0.91 against the built-in), AM/PM
+  shift (84 % of morning sinks in Midtown/Lower Manhattan), 15 communities (Q = 0.788 against the built-in's 0.734),
+  components (77 Jersey City/Hoboken stations are arrival-only), triangles, hops, travel times, personalized
+  PageRank and an operator tour. It writes `lake/graph/station_metrics` and six portal-ready `network-*.json` files.
+  The UI direction is decided: "Inkglass", with an evidence portal per module (ADR 011).
+- **Next task:** your call. Either P6.1–P6.3 early (web foundation, portal system, portals for P1–P3), for design
+  feedback while the backend phases continue, or P4.1 `StationArchetypesJob` (ML) as scheduled. Stop the Spark
+  containers before heavy host runs. The GBFS recorder keeps running in the background.
 - **Open questions:** none. Option for the user: raising `.wslconfig` `memory=` to 8 GB would add cluster headroom
   (ADR 009); not needed so far.

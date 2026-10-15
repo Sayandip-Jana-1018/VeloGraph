@@ -12,13 +12,14 @@ import velograph.common.LakePaths.PathOps
 final case class LakeTable(relativePath: String, schema: StructType)
 
 object LakeTable {
-  val BronzeTrips: LakeTable   = LakeTable("bronze/trips", LakeSchemas.BronzeTrip)
-  val SilverTrips: LakeTable   = LakeTable("silver/trips", LakeSchemas.SilverTrip)
-  val Stations: LakeTable      = LakeTable("silver/stations", LakeSchemas.SilverStation)
-  val WeatherHourly: LakeTable = LakeTable("silver/weather_hourly", LakeSchemas.SilverWeatherHourly)
-  val Calendar: LakeTable      = LakeTable("silver/calendar", LakeSchemas.SilverCalendar)
-  val StationHour: LakeTable   = LakeTable("gold/station_hour", LakeSchemas.GoldStationHour)
-  val RouteEdges: LakeTable    = LakeTable("gold/route_edges", LakeSchemas.GoldRouteEdge)
+  val BronzeTrips: LakeTable    = LakeTable("bronze/trips", LakeSchemas.BronzeTrip)
+  val SilverTrips: LakeTable    = LakeTable("silver/trips", LakeSchemas.SilverTrip)
+  val Stations: LakeTable       = LakeTable("silver/stations", LakeSchemas.SilverStation)
+  val WeatherHourly: LakeTable  = LakeTable("silver/weather_hourly", LakeSchemas.SilverWeatherHourly)
+  val Calendar: LakeTable       = LakeTable("silver/calendar", LakeSchemas.SilverCalendar)
+  val StationHour: LakeTable    = LakeTable("gold/station_hour", LakeSchemas.GoldStationHour)
+  val RouteEdges: LakeTable     = LakeTable("gold/route_edges", LakeSchemas.GoldRouteEdge)
+  val StationMetrics: LakeTable = LakeTable("graph/station_metrics", LakeSchemas.GraphStationMetrics)
 }
 
 /** Reads and locates lake tables, always with their declared schema. */

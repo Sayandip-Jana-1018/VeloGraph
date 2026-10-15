@@ -24,11 +24,17 @@ trait SparkJob {
   /** Does the work and returns the metrics to record in the job report. */
   def run(ctx: JobContext, args: Seq[String]): Map[String, Any]
 
+  /**
+   * Spark settings this job needs on top of the defaults. They beat application.conf, but spark-submit
+   * `--conf` still beats them.
+   */
+  def sparkConf: Map[String, String] = Map.empty
+
   protected lazy val log: Logger = LoggerFactory.getLogger(getClass.getName.stripSuffix("$"))
 
   final def main(args: Array[String]): Unit = {
     val cfg   = AppConfig.load()
-    val spark = SparkSessionFactory.create(s"velograph-$jobName", cfg)
+    val spark = SparkSessionFactory.create(s"velograph-$jobName", cfg, sparkConf)
     log.info(s"$jobName starting: mode=${cfg.mode} master=${spark.sparkContext.master} " +
       s"app=${spark.sparkContext.applicationId} data=${cfg.paths.root}")
 
