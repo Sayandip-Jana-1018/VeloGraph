@@ -29,8 +29,10 @@ explain each piece simply is a first-class requirement, not an afterthought.
    containers stopped.
 6. **No global machine changes** (PATH, JAVA_HOME, registry, `.wslconfig`, Docker settings) without asking.
    `scripts/env.ps1` sets everything for the current session only.
-7. **Ask before outward-facing or long-lived actions:** git push / creating remotes, deployments, publishing,
-   account sign-ups, background processes that keep running (e.g. the GBFS recorder). Say what and why.
+7. **Ask before outward-facing or long-lived actions:** deployments, publishing, account sign-ups, new remotes,
+   background processes that keep running. Say what and why. Standing approvals (from the user, 15 Oct 2026):
+   push every commit on `main` to `origin` = github.com/Sayandip-Jana-1018/VeloGraph; keep the GBFS recorder
+   running. Never force-push.
 8. **Never commit** `data/`, models, checkpoints, `.env*`, secrets or large binaries.
 
 ## Stack (pinned — change only via an ADR)
@@ -71,6 +73,8 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Run a Spark job | `.\scripts\submit.ps1 <job>` (host `local[20]`) · `-Mode cluster` (Docker) |
 | ✅ Cluster up / down | `docker compose -f infra/docker-compose.yml --profile kafka --profile spark up -d` / `down` |
 | ✅ Trip download | `cd python; uv run python -m velograph.ingest.download_trips 202609 202606 202607 202608` |
+| ✅ Weather download | `cd python; uv run python -m velograph.ingest.download_weather --start 2026-06-01` |
+| ✅ Bronze + silver | `.\scripts\submit.ps1 bronze-trips` (`-- --months 202609`) · `silver-trips -DriverMemory 6g` · `silver-stations` · `silver-weather` · `silver-calendar` |
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
 | Batch pipeline | `.\scripts\pipeline.ps1 -Mode dev -Stages bronze,silver,gold,sql,graph,ml` |
 | Live demo | `.\scripts\demo.ps1` |
@@ -99,6 +103,9 @@ Windows gotchas, learned the hard way:
 - scalac `-deprecation -feature -unchecked -Xlint`, zero warnings; scalafmt before commit.
 - Use Scala idioms deliberately (case classes, `Option`/`Try`, pattern matching, immutable collections,
   higher-order functions): they are Unit II material and the viva will probe them.
+- Time: all trip times are New York wall-clock (`spark.sql.session.timeZone=America/New_York`), but the JVM
+  default zone here is IST. Never turn a collected `java.sql.Timestamp` into text on the driver; format it in Spark
+  (`date_format`) so the session zone applies. In tests, compare formatted strings, not `Timestamp.valueOf`.
 
 **Python** — 3.11 venv via uv; ruff for lint + format; type hints; `logging`, not print; retries with exponential
 backoff on HTTP; producers flush on SIGINT; notebooks re-run cleanly top to bottom.
@@ -130,8 +137,8 @@ push without approval.
 
 ## Status
 
-- **Phase:** P1 Data acquisition — in progress. P0 done 15 Oct 2026 (evidence in ROADMAP); P1.1, P1.3 and P1.4 were
-  pulled forward and run in the background (trip downloads, GBFS recorder).
-- **Next task:** P1.2 Weather + calendar, then P1.5 `BronzeIngestJob` on the Sep 2026 slice.
+- **Phase:** P1 done 15 Oct 2026 (evidence in ROADMAP): bronze 20.6M trips, silver 20.5M valid (0.379 % quarantined),
+  2,490 stations with 99.59 % GBFS match, weather and calendar. GBFS recorder keeps running in the background.
+- **Next task:** P2.1 `GoldStationHourJob` (Gate A by end of D2). Stop the Spark containers before heavy host runs.
 - **Open questions:** none. Option for the user: raising `.wslconfig` `memory=` to 8 GB would add cluster headroom
   (ADR 009); not needed so far.

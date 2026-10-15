@@ -56,6 +56,9 @@ lazy val root = (project in file("."))
     Test / javaOptions       ++= jdk17Opens :+ "-Xmx2g",
     Test / parallelExecution  := false,
     assembly / assemblyJarName := "velograph-spark.jar",
+    // One jar, many jobs: spark-submit always names the --class, so no manifest main class is needed.
+    assembly / mainClass             := None,
+    Compile / packageBin / mainClass := None,
     assemblyPackageScala / assembleArtifact := false, // the Spark runtime provides scala-library 2.12
     assembly / assemblyMergeStrategy := {
       // Keep service registrations: they are how Spark discovers the "kafka" data source.

@@ -232,12 +232,30 @@ data/
 | start_date | date | partition column |
 | start_hour, dow | int | |
 
-Quarantine reason codes: `NON_POSITIVE_DURATION`, `DURATION_LT_60S`, `DURATION_GT_4H`, `COORD_OUT_OF_BBOX`,
-`IMPOSSIBLE_SPEED` (> 45 km/h), `DUPLICATE_RIDE_ID`. Trips without a station are *kept* and flagged; station-level
-tables simply filter them.
+**Station ids are normalised** in silver and wherever GBFS is joined: Citi Bike ids always have two decimals, but
+some trip records and 3 GBFS entries dropped the trailing zero (`5980.1` for `5980.10`), so a single decimal digit
+gets its zero back (`SilverTripsTransforms.normalizeStationId`). Without this, 97 stations would appear twice.
 
-**silver.stations** — `station_id, gbfs_station_id, name, lat, lon, capacity, region_id, first_seen, last_seen,
-trips_out, trips_in, in_gbfs`.
+**silver.trips_quarantine** — every rejected row with its parsed fields and `reject_reason`, partitioned by `ym` and
+`reject_reason`. Rules run in this order, first failure wins (thresholds in `velograph.dq`): `MALFORMED_CSV_ROW`,
+`MISSING_RIDE_ID`, `UNPARSEABLE_TIMESTAMP`, `NON_POSITIVE_DURATION`, `DURATION_TOO_SHORT` (< 60 s),
+`DURATION_TOO_LONG` (> 4 h), `UNKNOWN_RIDEABLE_TYPE`, `UNKNOWN_RIDER_TYPE`, `MISSING_START_COORD`,
+`START_COORD_OUT_OF_AREA`, `MISSING_END_COORD`, `END_COORD_OUT_OF_AREA`, `IMPOSSIBLE_SPEED` (> 45 km/h),
+`DUPLICATE_RIDE_ID`. Silver is rebuilt from all of bronze in one pass, because month files contain trips that start
+on the neighbouring month's boundary days.
+
+**silver.stations** — `station_id, gbfs_station_id, name, lat, lon, capacity (null when GBFS reports 0), region_id,
+first_seen, last_seen, trips_out, trips_in, in_gbfs, in_trips`: trip history full-outer-joined with the latest
+recorded GBFS registry on the normalised id.
+
+**silver.weather_hourly** — `ts_hour, temp_c, apparent_temp_c, precip_mm, rain_mm, snow_cm, wind_kmh, gust_kmh,
+humidity_pct, cloud_pct, weather_code, date, hour, is_raining`.
+
+**silver.calendar** — `date, dow (ISO, Mon = 1), is_weekend, month, iso_week, holiday_name, holiday_kind,
+is_holiday`, for `velograph.calendar.from..to`.
+
+Lake tables are always read with their declared schema (`TripSchemas`): Parquet keeps column types, but partition
+column types would otherwise be guessed from folder names (`ym=202609` reads back as an integer).
 
 **gold.station_hour** — complete panel of stations × hours with zero fill (≈ 2.3k × 2,928 ≈ 6.7M rows):
 `station_id, ts_hour, date (partition), hour, dow, is_weekend, is_holiday, departures, arrivals, net_flow
@@ -257,10 +275,11 @@ and out, Spark app id), which feeds the pipeline timeline and the report's bench
 
 | Job | Input → output | Spark concepts on show | Syllabus |
 |---|---|---|---|
-| BronzeIngestJob | raw CSV → bronze.trips | explicit schema, `input_file_name`, partitioned Parquet | U1, U4 |
-| SilverTripsJob | bronze → silver.trips + quarantine + `dq-report.json` | column expressions, accumulators, dedupe | U3, U4 |
-| SilverStationsJob | silver.trips + GBFS info → silver.stations | aggregations, `percentile_approx`, joins | U4 |
+| BronzeIngestJob | raw CSV → bronze.trips | explicit schema, PERMISSIVE + `_corrupt_record`, `input_file_name`, partitioned Parquet, reconciliation | U1, U4 |
+| SilverTripsJob | bronze → silver.trips + quarantine + `dq-report.json` | column expressions, window dedupe, `persist(MEMORY_AND_DISK_SER)`, repartition before partitioned write | U3, U4 |
+| SilverStationsJob | silver.trips + GBFS info → silver.stations | union, window ranking, `percentile_approx`, full outer join | U4 |
 | SilverWeatherJob | raw JSON → silver.weather_hourly | `arrays_zip` + `explode` | U4 |
+| SilverCalendarJob | config + bundled holidays → silver.calendar | `sequence`, broadcast join | U4 |
 | GoldStationHourJob | silver → gold.station_hour | cross-join panel, broadcast hints, partition pruning | U4, CO5 |
 | GoldRoutesJob | silver → gold.route_edges | conditional aggregates | U4 |
 | RddFundamentalsJob | raw CSV → `rdd-fundamentals.json` | textFile, map/filter/flatMap, reduceByKey vs groupByKey, join, persist levels, broadcast, accumulators, `toDebugString`, RDD → DataFrame | U1, U3, U4 |

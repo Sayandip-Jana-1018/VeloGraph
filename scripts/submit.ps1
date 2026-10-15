@@ -23,7 +23,12 @@ $root = Split-Path -Parent $PSScriptRoot
 
 # Short job name -> main class. Extended as each roadmap phase adds jobs.
 $jobClasses = @{
-    'smoke' = 'velograph.smoke.SmokeJob'
+    'smoke'           = 'velograph.smoke.SmokeJob'
+    'bronze-trips'    = 'velograph.etl.BronzeIngestJob'
+    'silver-trips'    = 'velograph.etl.SilverTripsJob'
+    'silver-stations' = 'velograph.etl.SilverStationsJob'
+    'silver-weather'  = 'velograph.etl.SilverWeatherJob'
+    'silver-calendar' = 'velograph.etl.SilverCalendarJob'
 }
 if (-not $jobClasses.ContainsKey($Job)) {
     throw "Unknown job '$Job'. Known jobs: $(($jobClasses.Keys | Sort-Object) -join ', ')"

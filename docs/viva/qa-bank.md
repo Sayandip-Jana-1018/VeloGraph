@@ -71,3 +71,71 @@ It polls the live feed every 60 s. Instead of saving all 2,519 stations every ti
 whose bikes or docks changed. A full snapshot is written at start-up, every 6 hours and at the start of each day,
 so any day can be replayed on its own. The recordings make the demo work offline, and later let us compare our
 forecasts with what actually happened.
+
+---
+
+## P1 · Data acquisition, bronze and silver
+
+**Q14. What are bronze, silver and gold, and why three layers?**
+*Bronze* is a faithful copy of the source: every CSV field kept as text, plus lineage (source file, month, ingestion
+time), so ingestion never fails and we can always reprocess. *Silver* is cleaned, typed and validated trips plus a
+quarantine of rejected rows. *Gold* (P2) holds analysis-ready aggregates such as the station × hour panel. Each
+layer can be rebuilt from the one before it.
+
+**Q15. Why convert CSV to Parquet?**
+Parquet is columnar: a query reads only the columns it needs, and per-column compression shrank our 3.8 GB of CSV to
+1.0 GB in bronze. It also stores the types, and keeps min/max statistics that let Spark skip whole blocks
+(predicate pushdown).
+
+**Q16. What is schema-on-read, and where do you use it?**
+Bronze stores every field as text; types are applied only when silver reads it. A bad value becomes null in silver
+and is quarantined instead of crashing the load. The CSV reader in PERMISSIVE mode also keeps any line with the
+wrong number of fields whole in `_corrupt_record` (our unit test proves it; the real data had 0 such lines).
+
+**Q17. What is lazy evaluation, and why did you `persist` in the silver job?**
+Transformations only build a plan; nothing runs until an *action* such as a write or a count. The silver job runs
+three actions on the same classified data: write silver, write the quarantine, compute the quality report. Without
+`persist`, Spark would re-read bronze, re-parse and re-run the duplicate-detection shuffle three times. We used
+`MEMORY_AND_DISK_SER`: partitions that did not fit in memory were spilled to disk, which is what the
+`MemoryStore` warnings in the log mean.
+
+**Q18. Why repartition by `start_date` before the partitioned write?**
+`partitionBy("start_date")` creates one folder per day, and every task writes a file into each folder it has rows
+for. Without repartitioning that is thousands of tiny files. Repartitioning by the date sends each day to one task,
+so silver has exactly one file per day: 123 files for 31 May – 30 Sep.
+
+**Q19. What is dynamic partition overwrite, and why does silver not use it?**
+It replaces only the partitions present in the new data, so re-ingesting September into bronze touches only
+`ym=202609`. Silver is rebuilt in one pass instead, because month files contain trips that start in the
+neighbouring month: the September file's first trip started on 31 Aug at 20:13. Overwriting dates month by month
+would have silently replaced 31 August with just those few trips.
+
+**Q20. Tell us about a data-quality problem you found.**
+Station ids. Citi Bike ids have two decimals, but 100 ids lost their trailing zero in 378,743 trip endpoints
+(`5980.1` and `5980.10` are both "E 17 St & Broadway"), and the live GBFS registry stores 3 ids the same way.
+Unfixed, one station becomes two graph vertices. Normalising both sides merged 97 duplicates (2,587 → 2,490
+stations) and raised the GBFS match from 98.88 % to 99.59 % of trip endpoints.
+
+**Q21. What did the quarantine catch?**
+78,098 of 20,606,696 rows (0.379 %): 49,559 trips without end coordinates (bikes never docked), 16,590 longer than
+4 hours, 11,945 e-bike trips without a start GPS fix and 4 impossible speeds. The count is about 19,500 every month,
+so these are systematic patterns rather than one bad file.
+
+**Q22. Why not use accumulators for the quality counts?**
+Spark guarantees accumulator updates only inside actions; inside transformations a retried or recomputed task can
+add twice. Our counts come from `groupBy` aggregations, which are exact. Accumulators are demonstrated where they are
+reliable, in the RDD job (P2.3).
+
+**Q23. How do you know no rows were lost?**
+Bronze compares its per-month row counts with the downloader's manifest, which counted the CSV lines, and fails on
+any difference. In silver, valid plus quarantined equals bronze exactly: 20,528,598 + 78,098 = 20,606,696.
+
+**Q24. What time-zone bug did you hit?**
+Trip times are New York wall-clock and Spark's session zone is `America/New_York`, but this laptop's JVM runs in
+IST. A timestamp collected to the driver as `java.sql.Timestamp` prints in the JVM zone, so New York midnight
+showed as 09:30. Rule since then: format timestamps inside Spark with `date_format`, never on the driver.
+
+**Q25. Why do you pass a schema when reading your own Parquet tables?**
+Parquet files store their column types, but partition columns live in folder names, and Spark guesses their type:
+`ym=202609` came back as an integer and broke the reconciliation. Declared schemas (`TripSchemas`) fix the types of
+partition columns too.

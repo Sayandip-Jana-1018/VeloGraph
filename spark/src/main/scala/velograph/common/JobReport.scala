@@ -1,12 +1,10 @@
 package velograph.common
 
-import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.Path
 import java.time.{Duration, Instant}
 
 import scala.util.Try
 
-import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -26,9 +24,6 @@ final case class JobReport(
 )
 
 object JobReport {
-
-  private val mapper =
-    new ObjectMapper().registerModule(DefaultScalaModule).enable(SerializationFeature.INDENT_OUTPUT)
 
   def of(
       job: String,
@@ -51,19 +46,6 @@ object JobReport {
       error = outcome.failed.toOption.map(e => s"${e.getClass.getName}: ${e.getMessage}")
     )
 
-  /** Writes atomically (temp file, then rename) so a reader never sees half a report. */
-  def write(dir: Path, report: JobReport): Path = {
-    Files.createDirectories(dir)
-    val meta: Map[String, Any] = Map(
-      "schema"      -> "velograph.job-report",
-      "version"     -> 1,
-      "generatedAt" -> report.endedAt,
-      "job"         -> report.job
-    )
-    val envelope: Map[String, Any] = Map("meta" -> meta, "data" -> report)
-    val target                     = dir.resolve(s"${report.job}.json")
-    val tmp                        = dir.resolve(s".${report.job}.json.tmp")
-    mapper.writeValue(tmp.toFile, envelope)
-    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-  }
+  def write(dir: Path, report: JobReport): Path =
+    ServingJson.write(dir.resolve(s"${report.job}.json"), "job-report", report.job, report)
 }
