@@ -361,3 +361,36 @@ because x$5 is null"*. With named arguments, scalac typed the default `defaultVe
 null.asInstanceOf[VD]` with VD = `Nothing`, and casting null to `Nothing` compiles to `throw null`. The fix was
 explicit type arguments, `Graph[StationAttr, RouteAttr](...)`. It is a Unit II lesson on type inference and the
 bottom type `Nothing`.
+
+## P6 · Web app (portals, Spark UI, frame budget)
+
+**Q53. How does a portal open as an overlay but also work as its own page?**
+Next.js has two routing features for this. A parallel route (`@portal`) is a second slot in the root layout. An
+intercepting route (`(.)portal/[id]`) catches a click on `/portal/lake` from inside the app and renders it into that
+slot, over the current page, inside a Radix dialog. The URL still changes, so Back closes it. On a refresh or a
+direct link nothing is intercepted, and `/portal/[id]` renders the same body as a full page. The report and the
+slides can therefore link straight to a portal.
+
+**Q54. Where do the Spark UI charts on the website come from?**
+From the Spark history server's REST API, the same data its web pages draw. `velograph.ops.spark_ui_export` reads
+`/api/v1` and writes `spark-ui.json`. It takes applications, jobs, stages with their task-time quantiles, executors,
+and SQL executions with their plan graph. The portal redraws the job timeline, each shuffle as a stage DAG labelled
+with bytes, and the physical plan with its WholeStageCodegen clusters. The bytes match the RDD job's own
+SparkListener count exactly: groupByKey 12,511,454 B against reduceByKey 734,004 B.
+
+**Q55. Why did removing the glass blur make scrolling four times faster?**
+`backdrop-filter: blur()` re-blurs whatever is behind a panel every time that changes. It changed on every frame:
+the page scrolled, and the background animated behind 9 to 21 blurred panels. A frame cost 25–30 ms, about 35 fps,
+with up to 36 % of frames slower than 33 ms. Now:
+- glass is translucency with a lit edge, and only the header keeps a real blur;
+- the background moves with GPU transforms only;
+- animations pause under an open portal;
+- charts are built only near the viewport.
+
+A frame now costs 6–7.5 ms. We measured it with a script that scrolls one step per frame in headless Edge.
+
+**Q56. Pages are "prerendered at build time". What does that mean here?**
+With Cache Components, a loader marked `'use cache'` (for example `getNetworkSummary`) runs once during `next
+build`: it reads the JSON, validates it with zod, and the result is stored. The build then generates 19 pages ahead
+of time, including the home page and every portal, in both overlay and page form. A visit is served a ready page
+instead of re-reading the data, and nothing needs the internet or the Spark cluster at run time.
