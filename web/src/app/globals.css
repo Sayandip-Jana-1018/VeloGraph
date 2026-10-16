@@ -1,0 +1,472 @@
+@import "tailwindcss";
+
+/*
+ * Inkglass (ADR 011). Layers, one job each:
+ *   backdrop = the premium stage (spotlight, drifting orbs, masked grid, light beams, star dust, grain)
+ *   glass    = portals, overlays, panels
+ *   clay     = neumorphic controls only (never body text)
+ *   ink      = hand-drawn annotations (decorative, aria-hidden; the facts also exist as text)
+ * Six colour presets (data-theme on <html>) recolour every layer. Data marks keep the validated dataviz palette,
+ * which passes the checks on every preset's chart surface.
+ */
+@theme {
+  --font-display: var(--font-bricolage), "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-inter), "Segoe UI", system-ui, sans-serif;
+  --font-hand: var(--font-caveat), "Segoe Print", cursive;
+  --font-mono: var(--font-jetbrains), Consolas, ui-monospace, monospace;
+
+  /* Surfaces (Nebula defaults; presets below override). ink-800 is the validated chart surface. */
+  --color-ink-950: #0b0a1d;
+  --color-ink-900: #110f2b;
+  --color-ink-850: #16133a;
+  --color-ink-800: #1c1938;
+  --color-ink-700: #272352;
+  --color-ink-600: #36316b;
+
+  /* Text: every step clears WCAG AA on every surface of every preset. */
+  --color-fg: #f5f2ff;
+  --color-fg-2: #cbc5ef;
+  --color-fg-3: #9b95c9;
+
+  --color-clay: #221e48;
+  --color-clay-deep: #1a1739;
+
+  --color-paper: #fbf1d4;
+  --color-paper-ink: #2b2452;
+  --color-chalk: #fff6e0;
+  /* The preset's signature highlight: links, active controls, ink annotations. */
+  --color-marker: #ffe066;
+
+  /* Backdrop light sources. */
+  --color-glow-a: #7c5cff;
+  --color-glow-b: #14b8a6;
+  --color-glow-c: #ff6b9d;
+
+  /* Sticker and chip accents (chrome only, never data). */
+  --color-teal: #34e0c8;
+  --color-coral: #ff7d6b;
+  --color-amber: #ffc857;
+  --color-violet: #b9a2ff;
+  --color-mint: #8ef5c9;
+  --color-pink: #ff9ed1;
+
+  /* Data: the dataviz categorical palette, dark steps, fixed order. */
+  --color-series-1: #3987e5;
+  --color-series-2: #d95926;
+  --color-series-3: #199e70;
+  --color-series-4: #c98500;
+  --color-series-5: #d55181;
+  --color-series-6: #008300;
+  --color-series-7: #9085e9;
+  --color-series-8: #e66767;
+
+  --radius-sheet: 2.25rem;
+  --radius-card: 1.75rem;
+}
+
+/* Registered colours interpolate, so switching presets cross-fades the whole site instead of snapping. */
+@property --color-ink-950 { syntax: "<color>"; inherits: true; initial-value: #0b0a1d; }
+@property --color-ink-900 { syntax: "<color>"; inherits: true; initial-value: #110f2b; }
+@property --color-ink-850 { syntax: "<color>"; inherits: true; initial-value: #16133a; }
+@property --color-ink-800 { syntax: "<color>"; inherits: true; initial-value: #1c1938; }
+@property --color-glow-a { syntax: "<color>"; inherits: true; initial-value: #7c5cff; }
+@property --color-glow-b { syntax: "<color>"; inherits: true; initial-value: #14b8a6; }
+@property --color-glow-c { syntax: "<color>"; inherits: true; initial-value: #ff6b9d; }
+@property --color-marker { syntax: "<color>"; inherits: true; initial-value: #ffe066; }
+:root {
+  transition:
+    --color-ink-950 0.8s ease,
+    --color-ink-900 0.8s ease,
+    --color-ink-850 0.8s ease,
+    --color-ink-800 0.8s ease,
+    --color-glow-a 1.2s ease,
+    --color-glow-b 1.2s ease,
+    --color-glow-c 1.2s ease,
+    --color-marker 0.8s ease;
+}
+
+/* ---- colour presets ------------------------------------------------------------------------------- */
+:root[data-theme="aurora"] {
+  --color-ink-950: #03141a; --color-ink-900: #071b22; --color-ink-850: #0a2129; --color-ink-800: #0f2a33;
+  --color-ink-700: #163b47; --color-ink-600: #1f5060;
+  --color-fg: #effcfa; --color-fg-2: #bfe6df; --color-fg-3: #86b8b0;
+  --color-clay: #0f2c35; --color-clay-deep: #0a222a;
+  --color-marker: #7af5d6; --color-glow-a: #10b981; --color-glow-b: #22d3ee; --color-glow-c: #a3e635;
+  --color-violet: #8ee6ff; --color-teal: #5eead4; --color-coral: #ffa38f; --color-amber: #e3f58a;
+}
+:root[data-theme="ember"] {
+  --color-ink-950: #110907; --color-ink-900: #180d0a; --color-ink-850: #1f130e; --color-ink-800: #271912;
+  --color-ink-700: #3a251b; --color-ink-600: #523426;
+  --color-fg: #fff6ef; --color-fg-2: #ecd2c2; --color-fg-3: #bf9b86;
+  --color-clay: #2a1a12; --color-clay-deep: #20140e;
+  --color-marker: #ffc061; --color-glow-a: #ff6a3d; --color-glow-b: #ff3d6e; --color-glow-c: #ffc857;
+  --color-violet: #ffb38a; --color-teal: #ffd27a; --color-coral: #ff8a6b; --color-amber: #ffd166;
+}
+:root[data-theme="rose"] {
+  --color-ink-950: #12070f; --color-ink-900: #190b16; --color-ink-850: #211020; --color-ink-800: #291527;
+  --color-ink-700: #3c1f39; --color-ink-600: #552b51;
+  --color-fg: #fff2f8; --color-fg-2: #efc9dc; --color-fg-3: #c497ad;
+  --color-clay: #2c1629; --color-clay-deep: #221020;
+  --color-marker: #ffb3d4; --color-glow-a: #ff4fa3; --color-glow-b: #b56cff; --color-glow-c: #ffcf99;
+  --color-violet: #e0b3ff; --color-teal: #ffc2e0; --color-coral: #ff8fb3; --color-amber: #ffd9a8;
+}
+:root[data-theme="midnight"] {
+  --color-ink-950: #040a18; --color-ink-900: #070f24; --color-ink-850: #0b1530; --color-ink-800: #101c3b;
+  --color-ink-700: #182a55; --color-ink-600: #233b73;
+  --color-fg: #f0f5ff; --color-fg-2: #c4d2f0; --color-fg-3: #8fa3cf;
+  --color-clay: #111e3f; --color-clay-deep: #0c1632;
+  --color-marker: #7dd3fc; --color-glow-a: #3b82f6; --color-glow-b: #6366f1; --color-glow-c: #22d3ee;
+  --color-violet: #a5b4fc; --color-teal: #67e8f9; --color-coral: #fda4af; --color-amber: #fde68a;
+}
+:root[data-theme="noir"] {
+  --color-ink-950: #0a0a0b; --color-ink-900: #111113; --color-ink-850: #161618; --color-ink-800: #1c1c1f;
+  --color-ink-700: #29292e; --color-ink-600: #3a3a41;
+  --color-fg: #f6f4ef; --color-fg-2: #d3d0c8; --color-fg-3: #a19e96;
+  --color-clay: #1f1f22; --color-clay-deep: #18181a;
+  --color-marker: #e8c27a; --color-glow-a: #c9a96e; --color-glow-b: #6d6d7d; --color-glow-c: #8a6d3b;
+  --color-violet: #d9c9a3; --color-teal: #c9c4b4; --color-coral: #e0a07a; --color-amber: #e8c27a;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    scrollbar-color: var(--color-ink-600) transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-ink-950 font-sans text-fg antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-marker) 45%, transparent);
+    color: var(--color-fg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-marker);
+    outline-offset: 3px;
+    border-radius: 0.5rem;
+  }
+}
+
+/* ---- glass ------------------------------------------------------------------------------------------- */
+/*
+ * Glass is translucency plus a lit edge, not a live blur. The stage behind is soft gradients, so a backdrop blur
+ * changed little on screen but cost a full re-blur of every panel on every frame of scrolling and animation. Only
+ * the sticky header, which has page content sliding under it, keeps a real one (glass-frost).
+ */
+@utility glass {
+  background: linear-gradient(150deg, rgb(255 255 255 / 0.085), rgb(255 255 255 / 0.02) 60%),
+    color-mix(in oklab, var(--color-ink-850) 72%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.11);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 30px 80px -40px rgb(0 0 0 / 0.85);
+}
+@utility glass-frost {
+  background: linear-gradient(150deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02) 60%),
+    color-mix(in oklab, var(--color-ink-850) 62%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.11);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 20px 50px -30px rgb(0 0 0 / 0.8);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+@utility glass-sheet {
+  background: linear-gradient(170deg, color-mix(in oklab, var(--color-ink-700) 82%, transparent), color-mix(in oklab, var(--color-ink-950) 97%, transparent) 55%);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 50px 140px -50px rgb(0 0 0 / 0.95);
+}
+@utility glass-inset {
+  background: var(--color-ink-800);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-frost {
+    background: var(--color-ink-850);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-frost,
+  .glass-sheet {
+    backdrop-filter: none;
+    background: var(--color-ink-850);
+  }
+}
+
+/* The hero map's window: a deep, nearly solid surface so the station lights stay crisp. */
+@utility map-surface {
+  background:
+    radial-gradient(120% 70% at 50% 0%, color-mix(in oklab, var(--color-glow-a) 13%, transparent), transparent 62%),
+    radial-gradient(90% 60% at 50% 100%, color-mix(in oklab, var(--color-glow-b) 9%, transparent), transparent 70%),
+    var(--color-ink-950);
+  border: 1px solid rgb(255 255 255 / 0.09);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 40px 90px -40px rgb(0 0 0 / 0.9);
+}
+
+/* Long pages skip layout and paint for sections far off screen; `auto` remembers each one's real height. */
+@utility cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
+}
+
+/* A spotlight that follows the pointer across a card (set --mx/--my from JS). */
+@utility spotlight {
+  background-image: radial-gradient(
+    420px circle at var(--mx, 50%) var(--my, -20%),
+    color-mix(in oklab, var(--color-marker) 14%, transparent),
+    transparent 60%
+  );
+}
+
+/* A glowing gradient border: the element gets a 1px ring painted with the preset's light sources. */
+@utility glow-ring {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--color-glow-a), transparent 35%, transparent 65%, var(--color-glow-b));
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+}
+
+/* ---- clay (neumorphism, controls only) ----------------------------------------------------------------- */
+@utility clay {
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.045), rgb(0 0 0 / 0.12)), var(--color-clay);
+  box-shadow:
+    -5px -5px 12px rgb(255 255 255 / 0.04),
+    7px 7px 16px rgb(0 0 0 / 0.55),
+    inset 0 1px 0 rgb(255 255 255 / 0.07);
+}
+@utility clay-pressed {
+  background: var(--color-clay-deep);
+  box-shadow:
+    inset 4px 4px 10px rgb(0 0 0 / 0.6),
+    inset -3px -3px 8px rgb(255 255 255 / 0.04);
+}
+@utility clay-well {
+  background: var(--color-clay-deep);
+  box-shadow:
+    inset 3px 3px 8px rgb(0 0 0 / 0.55),
+    inset -2px -2px 6px rgb(255 255 255 / 0.035);
+}
+
+/* ---- backdrop ------------------------------------------------------------------------------------------- */
+.stage {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  background:
+    radial-gradient(1400px 700px at 50% -12%, color-mix(in oklab, var(--color-glow-a) 32%, transparent), transparent 70%),
+    radial-gradient(900px 500px at 50% 110%, color-mix(in oklab, var(--color-glow-b) 18%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--color-ink-900), var(--color-ink-950) 45%);
+}
+/*
+ * Light orbs are soft by construction (radial gradients), not blurred: a blur filter and a blend mode on a
+ * moving layer were re-rendered every frame. Moving them is now a pure compositor transform.
+ */
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  will-change: transform;
+}
+.orb-a {
+  width: 56vw;
+  height: 56vw;
+  left: -16vw;
+  top: -6vh;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-glow-a) 34%, transparent), color-mix(in oklab, var(--color-glow-a) 12%, transparent) 55%, transparent);
+  animation: orb-a 46s ease-in-out infinite alternate;
+}
+.orb-b {
+  width: 50vw;
+  height: 50vw;
+  right: -14vw;
+  top: 26vh;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-glow-b) 26%, transparent), color-mix(in oklab, var(--color-glow-b) 9%, transparent) 55%, transparent);
+  animation: orb-b 58s ease-in-out infinite alternate;
+}
+.orb-c {
+  width: 42vw;
+  height: 42vw;
+  left: 30vw;
+  bottom: -24vw;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-glow-c) 20%, transparent), color-mix(in oklab, var(--color-glow-c) 7%, transparent) 55%, transparent);
+  animation: orb-c 64s ease-in-out infinite alternate;
+}
+@keyframes orb-a {
+  to {
+    transform: translate3d(12vw, 10vh, 0) scale(1.1);
+  }
+}
+@keyframes orb-b {
+  to {
+    transform: translate3d(-10vw, -8vh, 0) scale(0.9);
+  }
+}
+@keyframes orb-c {
+  to {
+    transform: translate3d(-8vw, -10vh, 0) scale(1.15);
+  }
+}
+/* A fine grid that fades out from the top centre. */
+.grid-veil {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 65% 50% at 50% 18%, #000 25%, transparent 78%);
+}
+/* Slowly turning light beams from above. */
+.beams {
+  position: absolute;
+  left: 50%;
+  top: -60vh;
+  width: 160vw;
+  height: 160vh;
+  translate: -50% 0;
+  background: repeating-conic-gradient(
+    from 0deg at 50% 50%,
+    color-mix(in oklab, var(--color-glow-a) 16%, transparent) 0deg 3deg,
+    transparent 3deg 18deg
+  );
+  mask-image: radial-gradient(ellipse 40% 45% at 50% 50%, #000, transparent 70%);
+  opacity: 0.35;
+  animation: beams 140s linear infinite;
+}
+@keyframes beams {
+  to {
+    rotate: 360deg;
+  }
+}
+/* Star dust: two offset dot fields that twinkle out of phase. */
+.dust,
+.dust::after {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(1px 1px at 20px 30px, rgb(255 255 255 / 0.7), transparent),
+    radial-gradient(1px 1px at 140px 90px, rgb(255 255 255 / 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 260px 200px, rgb(255 255 255 / 0.6), transparent),
+    radial-gradient(1px 1px at 380px 40px, rgb(255 255 255 / 0.45), transparent);
+  background-size: 420px 260px;
+  opacity: 0.25;
+  animation: twinkle 7s ease-in-out infinite alternate;
+}
+.dust::after {
+  content: "";
+  background-position: 210px 130px;
+  animation-delay: -3.5s;
+}
+@keyframes twinkle {
+  from {
+    opacity: 0.08;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+.grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 35%, transparent 45%, rgb(0 0 0 / 0.55) 100%);
+}
+
+/* Large gradient display text in the preset's colours. */
+@utility text-gleam {
+  background: linear-gradient(100deg, var(--color-fg) 20%, var(--color-marker) 45%, var(--color-glow-a) 60%, var(--color-fg) 85%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gleam 14s ease-in-out infinite alternate;
+}
+/* A sweep, then a long hold: the text is only repainted while the light is moving. */
+@keyframes gleam {
+  0%,
+  30% {
+    background-position: 0% 50%;
+  }
+  70%,
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+/* While a portal overlay is open the page under it is hidden, so its animations stop. */
+:root[data-portal-open] .stage *,
+:root[data-portal-open] .stage *::after,
+:root[data-portal-open] .marquee-track,
+:root[data-portal-open] .text-gleam {
+  animation-play-state: paused;
+}
+
+/* ---- marquee -------------------------------------------------------------------------------------------- */
+.marquee-track {
+  animation: marquee 70s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ---- code (shiki output) ------------------------------------------------------------------------------------ */
+.code-panel pre {
+  margin: 0;
+  padding: 1.1rem 1.25rem;
+  overflow-x: auto;
+  background: transparent !important;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.65;
+  counter-reset: line var(--first-line, 0);
+}
+.code-panel code .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 2.6rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: var(--color-fg-3);
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    transition: none;
+  }
+  .orb,
+  .beams,
+  .dust,
+  .dust::after,
+  .marquee-track,
+  .text-gleam {
+    animation: none;
+  }
+}

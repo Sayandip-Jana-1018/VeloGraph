@@ -479,7 +479,9 @@ state store, late data and triggers.
 
 ## 10. Serving layer & contracts
 
-Static exports are written to `data/serving/` and copied into `web/public/data/` by `scripts/sync-web-data.ps1`.
+Static exports are written to `data/serving/` and copied into `web/public/data/` by `pnpm sync` in `web/`
+(`web/scripts/sync-data.mjs`, which also copies the Spark UI screenshots, MapLibre's worker and the code snippets the
+portals quote).
 
 | File | Producer | Page |
 |---|---|---|
@@ -487,6 +489,7 @@ Static exports are written to `data/serving/` and copied into `web/public/data/`
 | `insights/<id>.json`, `insights/index.json` | InsightsJob | Insights |
 | `rdd-fundamentals.json`, `dq-report.json`, `jobs/*.json` | batch jobs | Cluster |
 | `network-summary.json` (graph size, vertex-cut comparison, PageRank runs and rankings, AM/PM shift, strength, communities, components, triangles, paths, operator tour, timings), `network-nodes.json` (one row per station, all metrics), `network-flows.json` (top routes overall, AM and PM), `network-communities.json`, `network-paths.json` (hops to hubs, travel times and personalized PageRank per landmark), `network-pregel.json` (superstep-by-superstep PageRank on a hub neighbourhood) | GraphMetricsJob | Network, `pregel` / `network` / `graph-ops` portals |
+| `spark-ui.json` (applications, the RDD lab's jobs and shuffle stages with task-time quantiles, the insights job's widest SQL plan, Pregel superstep jobs, executors) | `velograph.ops.spark_ui_export`, from the history server's REST API | `spark-ui` portal |
 | `archetypes.json`, `ml-regression.json`, `ml-classification.json`, `ml-ablation.json`, `ml-correlation.json`, `model-cards.json` | ML Lab + jobs | Models |
 | `live-replay/*.json` | recorder → exporter | Live (offline mode) |
 
@@ -541,7 +544,7 @@ are the doors into them.
 
 | Layer | Style | Used for |
 |---|---|---|
-| Canvas | maximalism | aurora mesh, paper grain, street-grid doodles, oversized type, stickers, tape, tickers |
+| Canvas | maximalism | spotlight, drifting light orbs, masked grid, turning beams, star dust, grain, oversized type, stickers, tape, tickers |
 | Glass | glassmorphism | portals, map overlays, floating panels |
 | Clay | neumorphism | controls only: toggles, AM/PM segments, superstep scrubbers, KPI pucks |
 | Ink | hand-drawn | rough.js frames, rough-notation highlights, freehand arrows with Caveat notes |
@@ -549,9 +552,32 @@ are the doors into them.
 Data marks stay exact (ECharts, deck.gl); ink only annotates them. The rules:
 
 - Every colour is a CSS-variable token, and the palette is checked with the `dataviz` skill.
+- Six colour presets (`data-theme` on `<html>`: Nebula, Aurora, Ember, Rose, Midnight, Noir) recolour the chrome
+  and cross-fade; data marks keep the validated palette ([ADR 012](adr/012-inkglass-presets-frame-budget-spark-ui.md)).
 - All text meets WCAG AA. Clay controls keep text labels and focus rings.
-- Glass falls back to solid surfaces when blur is unsupported or reduced transparency is requested.
-- `prefers-reduced-motion` turns off drawing animations.
+- Content is centred; two-column bands (the home hero, a chart beside its sticky note) align left and right.
+- `prefers-reduced-motion` turns off drawing animations; reduced transparency makes glass solid.
+
+**Frame budget** (ADR 012). Scrolling keeps a frame well under 16.7 ms, checked with `velograph.ops.scroll_bench`.
+Glass is translucency plus a lit edge: only the sticky header keeps a live backdrop blur. The backdrop animates
+only `transform` and `opacity`. While a portal is open, `<html data-portal-open>` pauses the page underneath.
+Canvas and WebGL loops run only on screen, charts are created near the viewport, and far-off portal acts use
+`content-visibility: auto`.
+
+**Home.** The hero has two columns: the claim on the left and a north-up "city of lights" canvas on the right
+(stations sized by PageRank, top-40 hubs, comets on the 500 busiest routes). Below it come the KPI pucks, a fact
+ticker and the portal bento grid, whose network card carries a server-rendered sketch of the 15 districts.
+
+**Spark UI portal.** It is drawn from `spark-ui.json`, the history server's REST data:
+
+- the application list;
+- the RDD job timeline;
+- shuffle stage DAGs labelled with bytes;
+- task-time box plots;
+- the Catalyst physical plan, with WholeStageCodegen clusters;
+- Pregel's one job per superstep.
+
+The original screenshots are pinned below as the source pages.
 
 Fonts: Bricolage Grotesque, Inter, Caveat and JetBrains Mono, all via `next/font`.
 
@@ -622,3 +648,4 @@ Open-Meteo.com (CC BY 4.0). Basemap © CARTO, © OpenStreetMap contributors.
 | [009](adr/009-docker-vm-6gb-budget.md) | Size the Docker cluster for a 6 GB VM | `.wslconfig` caps the VM at 6 GB; changing it is the user's call |
 | [010](adr/010-kafka-topic-naming.md) | Topic names use hyphens, never underscores | Kafka metric names treat `.` and `_` alike |
 | [011](adr/011-inkglass-design-and-portals.md) | "Inkglass" design language; one evidence portal per module | the user wants every module shown in the UI, maximalist + neumorphic + glass + hand-drawn |
+| [012](adr/012-inkglass-presets-frame-budget-spark-ui.md) | Colour presets; glass without live blur under a frame budget; the Spark UI's charts redrawn from its REST API | design feedback (16 Oct): presets, real Spark dashboards, no scroll lag (frame cost 25–30 ms → 6–7.5 ms) |

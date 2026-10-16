@@ -277,20 +277,22 @@ micro-batches & triggers · event vs processing time · watermarks · output mod
 Design: "Inkglass" with one evidence portal per module ([ADR 011](adr/011-inkglass-design-and-portals.md)).
 Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink annotations; data marks stay exact.
 
-- [ ] **P6.1 Foundation** — Next.js 16 (App Router, TS strict), Tailwind 4, shadcn/ui, motion, roughjs,
-  rough-notation, perfect-freehand; Inkglass tokens for the canvas, glass, clay and ink layers (palette validated
-  with the `dataviz` skill); fonts via `next/font`; app shell with ⌘K station search; zod contracts for every
-  serving file; `sync-web-data` script.
-- [ ] **P6.2 Portal system** — `@portal` parallel + intercepting routes (`/portal/<id>`); the portal layout (header
+- [x] **P6.1 Foundation** — Next.js 16 (App Router, TS strict), Tailwind 4, Radix primitives (instead of shadcn/ui
+  copies), motion, roughjs, rough-notation, perfect-freehand; Inkglass tokens for the canvas, glass, clay and ink
+  layers (palette validated with the `dataviz` skill) and six colour presets; fonts via `next/font`; zod contracts for
+  every serving file; `pnpm sync`. The ⌘K station search moves to P6.4 with the home page.
+- [x] **P6.2 Portal system** — `@portal` parallel + intercepting routes (`/portal/<id>`); the portal layout (header
   chips + source, hero, acts, "How Spark did it" code panel, "Say it in the viva" sticky note, numbers ledger); ink
   kit (sketch frames, notations, freehand arrows, sticky notes, stickers, tape); clay kit (toggle, segmented control,
   slider/knob, stepper, KPI puck).
-- [ ] **P6.3 Portals for P1–P3** — `lake` (medallion + DQ funnel), `rdd-lab` (shuffle duel, persistence race,
-  accumulator trap, lineage sketch, RDD → DataFrame), `sql` (14 insight cards + View SQL), `spark-ui` (pinned
-  screenshots with callouts), `pregel` (superstep step-through), `network` (PageRank map, AM ↔ PM morph, communities,
-  components, triangles, isochrones, "where riders go"), `graph-ops` (operator cards, vertex-cut comparison).
+- [x] **P6.3 Portals for P1–P3** — `lake` (medallion + DQ funnel), `rdd-lab` (shuffle duel, persistence race,
+  accumulator trap, lineage sketch, RDD → DataFrame), `sql` (14 insights in one gallery with View SQL and deep links),
+  `spark-ui` (the history server's charts redrawn from its REST API, plus pinned screenshots), `pregel` (superstep
+  step-through), `network` (PageRank map, AM ↔ PM morph, communities, travel times, "where riders go"), `graph-ops`
+  (operator cards, vertex-cut comparison).
 - [ ] **P6.4 `/` Home** — night-time trip replay hero (deck.gl TripsLayer on one real evening), KPI band, scroll story
-  of the pipeline whose chapters open the portals.
+  of the pipeline whose chapters open the portals, ⌘K station search. _So far:_ two-column hero with the city of
+  lights, KPI pucks, fact ticker, portal bento grid with the district sketch.
 - [ ] **P6.5 `/live` + `streaming` portal** — risk map with pulsing halos, alert ticker (SSE), KPIs, station drawer
   (status, forecast, archetype, community, PageRank), suggested moves as arcs, live/replay toggle.
 - [ ] **P6.6 `/models` + `models` portal** — leaderboards vs baselines, confusion matrix, predicted vs actual,
@@ -302,7 +304,18 @@ Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink ann
 
 **Gate C:** every page and portal renders real exports; the site works with the gateway down; the production build
 passes.
-**Evidence:** _pending_
+**Evidence (P6.1–P6.3, 16 Oct):**
+- **Portals:** 7, all reading real exports.
+- **Build and checks:** `pnpm build` passes (19 prerendered pages); `pnpm lint` reports 0 problems; `pnpm
+  typecheck` passes.
+- **Spark UI export:** `spark-ui.json` holds 10 applications, 34 RDD jobs, a 47-node SQL plan with 5 exchanges and
+  50 Pregel superstep jobs. Its shuffle bytes match `rdd-fundamentals.json` to the byte.
+- **Scrolling** (`velograph.ops.scroll_bench`, ADR 012):
+  - the mean frame fell from 25.5–29.9 ms to 6.2–7.5 ms;
+  - frames slower than 33 ms fell from 13–36 % to ≤ 0.9 %;
+  - live backdrop blurs in the RDD lab fell from 21 to 3.
+
+  Measured on the home page and the `rdd-lab`, `sql` and `network` overlays.
 
 ### P7 · Hardening & automation — D8
 

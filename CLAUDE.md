@@ -80,9 +80,13 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ History server | `docker compose -f infra/docker-compose.yml --profile history up -d spark-history` → http://localhost:18080 |
 | ✅ Spark UI screenshots | `cd python; uv run python -m velograph.ops.ui_screenshots` (history server up) → `docs/assets/spark-ui/` |
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
+| ✅ Spark UI export | `cd python; uv run python -m velograph.ops.spark_ui_export` (history server up) → `serving/spark-ui.json` |
+| ✅ Web data sync | `cd web; pnpm sync` (serving JSON, screenshots, MapLibre worker, code snippets → `public/`, `src/generated/`) |
+| ✅ Web dev server | `cd web; pnpm dev` → http://localhost:3000 (stale page after an edit: stop it, delete `web/.next/dev`, restart) |
+| ✅ Web checks | `cd web; pnpm typecheck` · `pnpm lint` · `pnpm build` |
+| ✅ Scroll benchmark | `cd python; uv run python -m velograph.ops.scroll_bench` (web server up; ADR 012 frame budget) |
 | Batch pipeline | `.\scripts\pipeline.ps1 -Mode dev -Stages bronze,silver,gold,sql,graph,ml` |
 | Live demo | `.\scripts\demo.ps1` |
-| Web dev server | `cd web; pnpm dev` |
 
 Windows gotchas, learned the hard way:
 - Quote `-D` flags in PowerShell (`sbt '-Dsbt.color=false'`); unquoted, PowerShell splits them at the dot.
@@ -147,14 +151,11 @@ push without approval.
 
 ## Status
 
-- **Phase:** P3 done 15 Oct 2026 (evidence in ROADMAP), P0–P3 on D1, two days ahead of schedule. `GraphMetricsJob`
-  runs the GraphX suite in 6 min: Pregel weighted PageRank (49 supersteps, ρ = 0.91 against the built-in), AM/PM
-  shift (84 % of morning sinks in Midtown/Lower Manhattan), 15 communities (Q = 0.788 against the built-in's 0.734),
-  components (77 Jersey City/Hoboken stations are arrival-only), triangles, hops, travel times, personalized
-  PageRank and an operator tour. It writes `lake/graph/station_metrics` and six portal-ready `network-*.json` files.
-  The UI direction is decided: "Inkglass", with an evidence portal per module (ADR 011).
-- **Next task:** your call. Either P6.1–P6.3 early (web foundation, portal system, portals for P1–P3), for design
-  feedback while the backend phases continue, or P4.1 `StationArchetypesJob` (ML) as scheduled. Stop the Spark
-  containers before heavy host runs. The GBFS recorder keeps running in the background.
+- **Phase:** P3 done 15 Oct 2026; P6.1–P6.3 done early on 16 Oct (evidence in ROADMAP). The web app has 7 evidence
+  portals over real exports, six colour presets, a two-column hero with the city of lights, and the Spark UI's charts
+  redrawn from the history server's REST API (`spark-ui.json`). The design was approved by the user on 16 Oct.
+  Scrolling keeps the ADR 012 frame budget (frame cost 25–30 ms → 6–7.5 ms).
+- **Next task:** P4.1 `StationArchetypesJob` (ML), then the rest of P4. Stop the Spark containers before heavy host
+  runs. The GBFS recorder keeps running in the background.
 - **Open questions:** none. Option for the user: raising `.wslconfig` `memory=` to 8 GB would add cluster headroom
   (ADR 009); not needed so far.
