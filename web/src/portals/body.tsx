@@ -1,6 +1,7 @@
 import {
   getDqReport,
   getInsightIndex,
+  getMlFeatures,
   getNetworkPregel,
   getNetworkSummary,
   getRddReport,
@@ -10,6 +11,7 @@ import type { Meta } from "@/lib/schemas";
 
 import { GraphOpsPortal } from "./graph-ops/graph-ops-portal";
 import { LakePortal } from "./lake/lake-portal";
+import { ModelsPortal } from "./models/models-portal";
 import { NetworkPortal } from "./network/network-portal";
 import { PregelPortal } from "./pregel/pregel-portal";
 import { RddLabPortal } from "./rdd-lab/rdd-lab-portal";
@@ -34,6 +36,8 @@ export function PortalBody({ id }: { id: PortalId }) {
       return <NetworkPortal />;
     case "graph-ops":
       return <GraphOpsPortal />;
+    case "models":
+      return <ModelsPortal />;
   }
 }
 
@@ -53,5 +57,7 @@ export async function portalSource(id: PortalId): Promise<Meta | undefined> {
       return (await getNetworkSummary()).meta;
     case "spark-ui":
       return (await getSparkUi()).meta;
+    case "models":
+      return (await getMlFeatures()).meta;
   }
 }

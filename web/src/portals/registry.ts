@@ -1,7 +1,7 @@
 import type { Accent } from "@/components/inkglass/paper";
 
 /** Evidence portals (ADR 011): one per module, each with its own URL `/portal/<id>`. */
-export const PORTAL_IDS = ["lake", "rdd-lab", "sql", "spark-ui", "pregel", "network", "graph-ops"] as const;
+export const PORTAL_IDS = ["lake", "rdd-lab", "sql", "spark-ui", "pregel", "network", "graph-ops", "models"] as const;
 export type PortalId = (typeof PORTAL_IDS)[number];
 
 export type PortalMeta = {
@@ -86,11 +86,20 @@ export const PORTALS: PortalMeta[] = [
     accent: "marker",
     sources: ["network-summary.json"],
   },
+  {
+    id: "models",
+    title: "Models",
+    kicker: "MLlib, measured honestly",
+    hook: "Station archetypes by KMeans, next-hour demand against the seasonal-naive baseline, drain-or-fill classes, and what GraphX adds.",
+    units: ["Unit VI"],
+    outcomes: ["CO4", "CO6"],
+    accent: "coral",
+    sources: ["archetypes.json", "ml-features.json", "ml-*.json", "model-cards.json"],
+  },
 ];
 
 /** Portals planned for the next phases, shown as sketches so the whole syllabus is visible from day one. */
 export const UPCOMING = [
-  { title: "Models", note: "MLlib leaderboards, confusion matrix, ablation", phase: "P4" },
   { title: "Streaming", note: "Kafka, Structured Streaming, broker failover", phase: "P5" },
   { title: "Cluster", note: "Spark master, workers, brokers, job timeline", phase: "P5" },
   { title: "Syllabus", note: "Every unit and CO, one click from its evidence", phase: "P6" },

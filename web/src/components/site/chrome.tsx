@@ -9,6 +9,7 @@ const NAV = [
   { href: "/portal/network", label: "Network" },
   { href: "/portal/pregel", label: "Pregel" },
   { href: "/portal/spark-ui", label: "Spark UI" },
+  { href: "/portal/models", label: "Models" },
 ];
 
 export function SiteHeader() {
@@ -31,9 +32,6 @@ export function SiteHeader() {
               {item.label}
             </Link>
           ))}
-          <span className="rounded-full px-4 py-1.5 text-fg-3" title="Arrives with the ML phase">
-            Models · soon
-          </span>
         </nav>
         <div className="justify-self-end">
           <ThemeSwitcher />

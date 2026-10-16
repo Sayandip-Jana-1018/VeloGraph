@@ -108,6 +108,69 @@ object LakeSchemas {
     "date"               -> DateType
   )
 
+  /**
+   * `gold/station_archetypes`: each station's archetype in each profile window (P4.1). The clusters are
+   * learned on profile-a and applied unchanged to profile-b, so an archetype id means the same in both.
+   */
+  val GoldStationArchetype: StructType = fields(
+    "station_id"     -> StringType,
+    "window"         -> StringType,
+    "trips"          -> LongType,
+    "fitted"         -> BooleanType,
+    "archetype"      -> IntegerType,
+    "archetype_name" -> StringType,
+    "pca_x"          -> DoubleType,
+    "pca_y"          -> DoubleType
+  )
+
+  /**
+   * `gold/ml_features`, partitioned by `date` (P4.2): one row per station-hour of the fit and test splits,
+   * with features drawn only from each split's profile window (ARCHITECTURE §8.2, §8.3) and the targets.
+   */
+  val GoldMlFeature: StructType = fields(
+    "station_id"      -> StringType,
+    "ts_hour"         -> TimestampType,
+    "split"           -> StringType,
+    "is_validation"   -> BooleanType,
+    "hour"            -> IntegerType,
+    "hour_sin"        -> DoubleType,
+    "hour_cos"        -> DoubleType,
+    "dow"             -> IntegerType,
+    "is_weekend"      -> BooleanType,
+    "is_holiday"      -> BooleanType,
+    "temp_c"          -> DoubleType,
+    "apparent_temp_c" -> DoubleType,
+    "precip_mm"       -> DoubleType,
+    "wind_kmh"        -> DoubleType,
+    "humidity_pct"    -> DoubleType,
+    "cloud_pct"       -> DoubleType,
+    "is_raining"      -> BooleanType,
+    "capacity"        -> IntegerType,
+    "capacity_known"  -> BooleanType,
+    "lat"             -> DoubleType,
+    "lon"             -> DoubleType,
+    "archetype"       -> IntegerType,
+    "pagerank_w"      -> DoubleType,
+    "pr_am"           -> DoubleType,
+    "pr_pm"           -> DoubleType,
+    "pr_shift"        -> DoubleType,
+    "in_strength"     -> LongType,
+    "out_strength"    -> LongType,
+    "imbalance_ratio" -> DoubleType,
+    "clustering_coef" -> DoubleType,
+    "community"       -> IntegerType,
+    "prof_dep_mean"   -> DoubleType,
+    "prof_arr_mean"   -> DoubleType,
+    "prof_dep_std"    -> DoubleType,
+    "prof_arr_std"    -> DoubleType,
+    "has_profile"     -> BooleanType,
+    "departures"      -> LongType,
+    "arrivals"        -> LongType,
+    "net_flow"        -> LongType,
+    "regime"          -> IntegerType,
+    "date"            -> DateType
+  )
+
   /** `gold/route_edges`: one row per directed station pair with at least one trip. */
   val GoldRouteEdge: StructType = fields(
     "src_id"            -> StringType,

@@ -12,17 +12,15 @@ Usage (history server on :18080; from ``python/``)::
 
 from __future__ import annotations
 
-import json
 import logging
-import tempfile
-from datetime import UTC, datetime
+from datetime import datetime
 from itertools import pairwise
-from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 
 from velograph.common.logs import configure_logging
+from velograph.common.serving import write_serving
 from velograph.common.settings import data_paths
 from velograph.ops.ui_screenshots import HistoryApi
 
@@ -186,22 +184,6 @@ def executors(api: HistoryApi, app: str) -> list[dict[str, Any]]:
     ]
 
 
-def write_envelope(path: Path, data: dict[str, Any], rows: int) -> None:
-    meta = {
-        "schema": "velograph.spark-ui",
-        "version": 1,
-        "generatedAt": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "job": "spark-ui-export",
-        "rows": rows,
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w", dir=path.parent, delete=False, suffix=".tmp", encoding="utf-8"
-    ) as tmp:
-        json.dump({"meta": meta, "data": data}, tmp, indent=2)
-    Path(tmp.name).replace(path)  # atomic: a reader never sees half a file
-
-
 def main(base: Annotated[str, typer.Option(help="History server URL.")] = "http://localhost:18080") -> None:
     configure_logging("spark_ui_export")
     api = HistoryApi(base)
@@ -215,7 +197,7 @@ def main(base: Annotated[str, typer.Option(help="History server URL.")] = "http:
         "pregel": pregel_section(api, by_name["graph-metrics"]),
     }
     target = data_paths().serving / "spark-ui.json"
-    write_envelope(target, data, rows=len(apps))
+    write_serving(target, "spark-ui", "spark-ui-export", data, rows=len(apps))
     log.info(
         "wrote %s: %d applications, %d RDD jobs, SQL plan with %d nodes, %d Pregel superstep jobs",
         target,

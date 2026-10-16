@@ -394,3 +394,107 @@ With Cache Components, a loader marked `'use cache'` (for example `getNetworkSum
 build`: it reads the JSON, validates it with zod, and the result is stored. The build then generates 19 pages ahead
 of time, including the home page and every portal, in both overlay and page form. A visit is served a ready page
 instead of re-reading the data, and nothing needs the internet or the Spark cluster at run time.
+
+## P4 · Machine learning (MLlib, PySpark lab)
+
+**Q57. What are the station archetypes, and how was k chosen?**
+Each station's day is a profile with four curves: departures and arrivals, on working days and on days off, in
+3-hour bins, scaled to sum to 1, so it describes shape and not size. KMeans clustered 2,283 stations for
+k = 3–10. Each k took the best of five runs by within-cluster cost, and the k with the best silhouette won,
+among those whose smallest cluster holds at least 2 % of stations. That was k = 3, silhouette 0.211:
+- **Morning origin** (1,084 stations): riders leave in the morning;
+- **Strong morning destination** (235): AM arrivals 2.5× departures, such as Park Ave & E 42 St;
+- **Leisure** (1,065): a day off as busy as a working day.
+
+A silhouette of 0.21 means station rhythms are a continuum, not tight groups.
+
+**Q58. How do you stop features from leaking the future?**
+The splits are by time:
+- **Fit:** August rows, whose features come from 6 Jun – 31 Jul.
+- **Test:** September rows, whose features come from 7 Jul – 31 Aug.
+
+`MlConfig` cannot even be constructed with a profile window that does not end before its rows start. The
+feature job then checks the same on the data it read (31 Jul < 1 Aug, 31 Aug < 1 Sep). The graph features are
+recomputed per window, because the P3 graph includes September. The archetype model is learned on the fit window
+and applied to both, so an archetype id means the same in August and September.
+
+**Q59. Why recompute PageRank for the ML features when GraphX already ran in P3?**
+P3's graph was built from all four months of trips. Its PageRank for a station partly reflects September, so a
+September prediction would be using September. `GraphFeatures` runs the same algorithms (weighted PageRank, AM/PM
+PageRank, strengths, clustering coefficient, label propagation) on each 8-week window. Two adjustments keep the
+windows comparable:
+- the strong-tie rule is scaled to the window (≥ 9 trips instead of ≥ 20);
+- districts are matched to the fit window's ids by majority overlap (14 of 14).
+
+**Q60. How was the drain/fill threshold τ chosen?**
+From the data, on the fit rows only. τ is the 70th percentile of |net flow| / capacity, which came out at 0.0526.
+So an hour drains a 30-dock station when it loses more than 1.58 bikes net, which in whole bikes means 2 or more.
+That leaves 13.8 % draining, 72.5 % stable and 13.7 % filling hours in August, and September keeps the same τ.
+
+**Q61. How good are the demand forecasts, honestly?**
+For departures in September, the random forest has an MAE of 1.46 trips per station-hour (R² 0.745). The seasonal
+naive forecast (each station's own mean for that weekday and hour over the previous eight weeks) has 1.56. That is
+6.6 % better. Arrivals are 6.3 % better, with gradient-boosted trees trained on absolute loss. Both fall short of
+the 10 % we aimed for. The baseline is strong because it
+already knows each station's weekly rhythm. The models add the part habit does not explain: weather, holidays, and
+how similar stations behave. Without a same-day signal, such as the previous hour's flow (which the live GBFS feed
+provides), that part is small. We report the gap rather than tune on September.
+
+**Q62. Why did the random forest win departures, and how was it chosen?**
+Each candidate trained on 1–24 August and was scored on 25–31 August:
+- linear regression (three regularisation settings);
+- decision trees (depth 8 and 12);
+- random forests (30 trees, depth 10 and 12);
+- gradient-boosted trees (depth 5 and 7, plus absolute loss).
+
+For departures, the random forest at depth 12 had the lowest validation MAE (1.421), so it is the champion.
+September was only used to report it. Averaging 30 trees, each grown on half the rows, cuts the variance a single deep tree has: the
+decision tree's validation MAE is 1.470.
+
+**Q63. The models are judged on MAE but trained on squared error. Is that a mismatch?**
+Partly. Squared error aims at the mean, but for counts that are mostly zero the forecast with the lowest MAE is the
+median, which is lower. Spark's GBT can train on absolute loss directly, so the lab's grid includes it. For departures it
+reached 1.429 on the validation week, close to the forest's 1.421 but not better. For arrivals it was the best
+(1.431 against 1.432), so the arrivals champion is an absolute-loss GBT, with a September MAE of 1.467.
+
+**Q64. Why macro-F1, and what does the confusion matrix say?**
+73.6 % of September hours are stable, so a model that always answers "stable" is 73.6 % accurate but useless. Its
+macro-F1, the mean of the three per-class F1 scores, is only 0.28. Every classifier trains with class weights
+`n / (k · n_class)`, which give the three classes equal total weight. The champion is chosen on macro-F1:
+- **Champion:** a linear SVM, one-vs-rest, with validation macro-F1 0.5210, a hair ahead of the random forest's
+  0.5209. Its September macro-F1 is 0.519 (accuracy 65.9 %).
+- **Seasonal-naive regime:** the regime implied by the profile's expected net flow, at 0.508. So the models add
+  little there.
+
+The matrix shows why. Stable hours are recognised well (precision 0.865, recall 0.726). For draining and filling,
+the models catch almost half (recall 0.46–0.47) but raise twice as many false alarms (precision 0.32). An hour's net
+flow of a few bikes is noisy, and calling its sign is hard.
+
+**Q65. How does one-vs-rest turn a binary SVM into a three-class one?**
+It trains one linear SVM per class: "draining or not", "stable or not", "filling or not". Each SVM's raw output is
+the signed distance to its separating hyperplane. The class whose SVM is furthest on the positive side wins. The lab
+writes that comparison with built-in column functions (`vector_to_array` and `greatest`): PySpark's own
+`OneVsRestModel` scores with Python UDFs, and a Python worker crashed on Windows. The Scala champion job uses Spark's
+JVM `OneVsRest`, which is the same method.
+
+**Q66. What do the GraphX features add to the forecasts?**
+The ablation refits the departures champion on August with whole feature groups removed and scores September:
+- without the GraphX features, MAE rises 1.6 %;
+- without the hour-of-week profiles, 6.4 %;
+- without both, 26.3 %;
+- without weather, 7.6 %.
+
+So the graph features matter little while the profiles are there, because both describe how busy a station is.
+Without the profiles, though, PageRank and strengths carry most of that signal: removing both costs far more than
+either alone. That is CO6 measured inside CO4.
+
+**Q67. The lab is in PySpark and the production models in Scala. How do you know they are the same models?**
+`TrainChampionJob` rebuilds the lab's feature pipeline stage for stage:
+- the same StringIndexer, one-hot and VectorAssembler order;
+- the same algorithm and parameters, declared in config;
+- the same input splits: the lab ran local[16], so the job pins `spark.sql.files.minPartitionNum = 16`, because
+  forests sample per partition.
+
+It refits on August and must match the lab's September score within 1 %, or it fails. It matched to five decimals
+for all three models (departures MAE 1.45950, arrivals MAE 1.46738, regime macro-F1 0.51883), and saved them with
+model cards carrying their windows, parameters and git commit.

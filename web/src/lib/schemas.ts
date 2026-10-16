@@ -427,3 +427,206 @@ export const SparkUi = envelope(
   }),
 );
 export type SparkUi = z.infer<typeof SparkUi>;
+
+// ---- P4: machine learning (ARCHITECTURE §8) -------------------------------------------------------------------
+const Range = z.object({ from: z.string(), to: z.string() });
+
+export const Archetypes = envelope(
+  z.object({
+    window: Range,
+    k: z.number(),
+    silhouette: z.number(),
+    selection: z.array(z.object({ k: z.number(), silhouette: z.number(), smallestShare: z.number() })),
+    minTrips: z.number(),
+    explainedVariance: z.array(z.number()),
+    archetypes: z.array(
+      z.object({
+        id: z.number(),
+        name: z.string(),
+        stations: z.number(),
+        fitted: z.number(),
+        offToWork: z.number(),
+        amDepartures: z.number(),
+        amArrivals: z.number(),
+        pmDepartures: z.number(),
+        pmArrivals: z.number(),
+        curves: z.object({
+          workDep: z.array(z.number()),
+          workArr: z.array(z.number()),
+          offDep: z.array(z.number()),
+          offArr: z.array(z.number()),
+        }),
+        examples: z.array(z.string()),
+      }),
+    ),
+    points: z.array(
+      z.object({ station: z.string(), name: z.string(), x: z.number(), y: z.number(), archetype: z.number(), trips: z.number() }),
+    ),
+    stability: z.object({ stations: z.number(), changed: z.number() }),
+  }),
+);
+export type Archetypes = z.infer<typeof Archetypes>;
+
+const FeatureSpec = z.object({ name: z.string(), group: z.string(), kind: z.string(), description: z.string() });
+export const MlFeatures = envelope(
+  z.object({
+    windows: z.array(z.object({ split: z.string(), rows: Range, profile: Range })),
+    validation: Range,
+    tau: z.number(),
+    tauQuantile: z.number(),
+    strongMinTrips: z.number(),
+    medianCapacity: z.number(),
+    communitiesMatched: z.number(),
+    communitiesNew: z.number(),
+    leakage: z.array(z.object({ split: z.string(), lastProfileDay: z.string(), firstRowDay: z.string(), passed: z.boolean() })),
+    splits: z.array(
+      z.object({
+        split: z.string(),
+        rows: z.number(),
+        validationRows: z.number(),
+        stations: z.number(),
+        withoutProfile: z.number(),
+        withoutArchetype: z.number(),
+        draining: z.number(),
+        stable: z.number(),
+        filling: z.number(),
+        meanDepartures: z.number(),
+      }),
+    ),
+    features: z.array(FeatureSpec),
+    targets: z.array(FeatureSpec),
+  }),
+);
+export type MlFeatures = z.infer<typeof MlFeatures>;
+
+export const MlCorrelation = envelope(
+  z.object({
+    split: z.string(),
+    sampleFraction: z.number(),
+    sampleRows: z.number(),
+    columns: z.array(z.string()),
+    constant: z.array(z.string()),
+    pearson: z.array(z.array(z.number())),
+    spearman: z.array(z.array(z.number())),
+    withDepartures: z.array(z.object({ feature: z.string(), pearson: z.number(), spearman: z.number() })),
+    demand: z.record(z.string(), z.object({ departures: z.array(z.number()), arrivals: z.array(z.number()) })),
+    departuresHistogram: z.array(z.object({ value: z.string(), share: z.number() })),
+    dispersion: z.object({ rows: z.number(), mean: z.number(), variance: z.number(), zeroShare: z.number() }),
+  }),
+);
+export type MlCorrelation = z.infer<typeof MlCorrelation>;
+
+const Params = z.record(z.string(), z.union([z.number(), z.string(), z.boolean()]));
+const RegMetrics = z.object({ mae: z.number(), rmse: z.number(), r2: z.number(), rows: z.number() });
+export type RegMetrics = z.infer<typeof RegMetrics>;
+const RegressionTarget = z.object({
+  leaderboard: z.array(z.object({ model: z.string(), params: Params, validation: RegMetrics, test: RegMetrics })),
+  champion: z.string(),
+  improvementVsNaive: z.number(),
+  byHour: z.array(z.object({ hour: z.number(), champion: z.number(), naive: z.number() })),
+  byArchetype: z.array(
+    z.object({ archetype: z.number(), name: z.string(), champion: z.number(), naive: z.number(), rows: z.number() }),
+  ),
+  residuals: z.array(z.object({ bin: z.number(), share: z.number() })),
+  calibration: z.array(z.object({ actual: z.number(), meanPrediction: z.number(), rows: z.number() })),
+  importances: z.array(z.object({ feature: z.string(), importance: z.number() })),
+  baselines: z.record(z.string(), z.object({ validation: RegMetrics, test: RegMetrics })),
+});
+export type RegressionTarget = z.infer<typeof RegressionTarget>;
+export const MlRegression = envelope(
+  z.object({
+    protocol: z.object({ train: Range, validation: Range, test: Range, selection: z.string(), tunedOn: z.string() }),
+    grid: z.record(z.string(), z.array(Params)),
+    tuning: z.record(z.string(), z.array(z.object({ params: Params, validation: RegMetrics }))),
+    fixedParams: z.record(z.string(), Params),
+    targets: z.record(z.string(), RegressionTarget),
+  }),
+);
+export type MlRegression = z.infer<typeof MlRegression>;
+
+const ClassMetrics = z.object({
+  accuracy: z.number(),
+  macroF1: z.number(),
+  perClass: z.array(
+    z.object({ class: z.number(), precision: z.number(), recall: z.number(), f1: z.number(), support: z.number() }),
+  ),
+  rows: z.number(),
+  confusion: z.array(z.array(z.number())),
+});
+export type ClassMetrics = z.infer<typeof ClassMetrics>;
+export const MlClassification = envelope(
+  z.object({
+    tau: z.number(),
+    tauQuantile: z.number(),
+    classes: z.array(z.object({ id: z.number(), name: z.string() })),
+    balance: z.record(z.string(), z.record(z.string(), z.number())),
+    weighting: z.string(),
+    selection: z.string(),
+    grid: z.record(z.string(), z.array(Params)),
+    tuning: z.record(z.string(), z.array(z.object({ params: Params, validation: ClassMetrics }))),
+    fixedParams: z.record(z.string(), Params),
+    baselines: z.record(z.string(), z.object({ validation: ClassMetrics, test: ClassMetrics })),
+    leaderboard: z.array(z.object({ model: z.string(), params: Params, validation: ClassMetrics, test: ClassMetrics })),
+    champion: z.string(),
+  }),
+);
+export type MlClassification = z.infer<typeof MlClassification>;
+
+export const MlAblation = envelope(
+  z.object({
+    target: z.string(),
+    model: z.string(),
+    params: Params,
+    fixedParams: Params,
+    naive: RegMetrics,
+    variants: z.array(
+      z.object({
+        name: z.string(),
+        dropped: z.array(z.string()),
+        features: z.number(),
+        test: RegMetrics,
+        deltaMae: z.number(),
+        deltaMaePct: z.number(),
+        deltaR2: z.number(),
+      }),
+    ),
+  }),
+);
+export type MlAblation = z.infer<typeof MlAblation>;
+
+export const ModelCards = envelope(
+  z.array(
+    z.object({
+      name: z.string(),
+      target: z.string(),
+      algorithm: z.string(),
+      params: z.record(z.string(), z.string()),
+      features: z.array(z.string()),
+      fit: Range,
+      test: Range,
+      trainingRows: z.number(),
+      trainingMillis: z.number(),
+      metric: z.string(),
+      testMetric: z.number(),
+      labMetric: z.number(),
+      deltaPct: z.number(),
+      regression: RegMetrics.nullable(),
+      classification: z
+        .object({
+          accuracy: z.number(),
+          macroF1: z.number(),
+          perClass: z.array(
+            z.object({ label: z.number(), precision: z.number(), recall: z.number(), f1: z.number(), support: z.number() }),
+          ),
+          confusion: z.array(z.array(z.number())),
+          rows: z.number(),
+        })
+        .nullable(),
+      tau: z.number().nullable(),
+      modelPath: z.string(),
+      sparkVersion: z.string(),
+      gitSha: z.string(),
+    }),
+  ),
+);
+export type ModelCards = z.infer<typeof ModelCards>;

@@ -228,25 +228,64 @@ weights change rankings · LPA & modularity · triangles & clustering coefficien
 
 ### P4 · Machine learning — D4
 
-- [ ] **P4.1 `StationArchetypesJob`** — 96-dim hourly share profiles (weekday/weekend × departures/arrivals) → KMeans
-  k = 3..10 by silhouette → named archetypes; PCA 2-D for display.
-- [ ] **P4.2 `FeatureBuildJob`** — leakage-safe windows (ARCHITECTURE §8.2), trailing hour-of-week profiles, weather,
-  calendar, station + graph + archetype features → `gold/ml_features`; assertions that every profile window ends
-  before its fit/test window starts.
-- [ ] **P4.3 Lab 01 · EDA (PySpark)** — distributions, demand curves, Pearson + Spearman heat map.
-- [ ] **P4.4 Lab 02 · Regression** — global-mean and seasonal-naive baselines; LinearRegression (elastic net),
+- [x] **P4.1 `StationArchetypesJob`** — daily share profiles (working day/day off × departures/arrivals; 96 hourly
+  slots summed into 3-hour bins for clustering) → KMeans k = 3..10, best of 5 restarts, by silhouette → named
+  archetypes; PCA 2-D for display. Learned on profile A, applied to both windows
+  ([ADR 013](adr/013-leakage-safe-graph-features-and-archetypes.md)).
+- [x] **P4.2 `FeatureBuildJob`** — leakage-safe windows (ARCHITECTURE §8.2), trailing hour-of-week profiles, weather,
+  calendar, station + graph (GraphX rerun per window) + archetype features → `gold/ml_features`; assertions that
+  every profile window ends before its fit/test window starts, in config and on the data.
+- [x] **P4.3 Lab 01 · EDA (PySpark)** — distributions, demand curves, Pearson + Spearman heat map.
+- [x] **P4.4 Lab 02 · Regression** — global-mean and seasonal-naive baselines; LinearRegression (elastic net),
   DecisionTree, RandomForest, GBT; tuning on the last fit week; R², RMSE, MAE on Sep; residuals; error by hour and
   archetype.
-- [ ] **P4.5 Lab 03 · Classification** — regime threshold τ chosen from the data; LogisticRegression (multinomial),
-  DecisionTree, RandomForest, Gaussian NaiveBayes, LinearSVC via OneVsRest; class weights; confusion matrices,
+- [x] **P4.5 Lab 03 · Classification** — regime threshold τ chosen from the data; LogisticRegression (multinomial),
+  DecisionTree, RandomForest, Gaussian NaiveBayes, LinearSVC one-vs-rest (written out with built-in functions:
+  PySpark's OneVsRestModel scores with Python UDFs); class weights; confusion matrices,
   accuracy, macro-F1, per-class precision/recall.
-- [ ] **P4.6 Lab 04 · Ablation** — champion with/without graph features and with/without profiles.
-- [ ] **P4.7 `TrainChampionJob` (Scala)** — retrain the chosen configs, save `PipelineModel`s + model cards; assert
+- [x] **P4.6 Lab 04 · Ablation** — champion with/without graph features and with/without profiles.
+- [x] **P4.7 `TrainChampionJob` (Scala)** — retrain the chosen configs, save `PipelineModel`s + model cards; assert
   test metrics match the lab within ±1 %.
 
 **Acceptance:** champion beats seasonal-naive MAE on Sep (target ≥ 10 %; otherwise iterate at most ½ day, then report
 honestly); confusion matrix + macro-F1 exported; ablation quantified.
-**Evidence:** _pending_
+
+**Evidence (16 Oct):**
+- **P4.1 archetypes:**
+  - k = 3 by silhouette 0.211; across k = 3–10 it falls to 0.135.
+  - 2,283 stations clustered, 2,384 assigned: Leisure 1,065 · Morning origin 1,084 · Strong morning destination 235.
+  - 88 % keep their archetype from window A to B. 169 s.
+- **P4.2 features:**
+  - 1,768,776 fit rows (401,400 of them the validation week) and 1,717,896 test rows, 31 features.
+  - τ = 0.0526 × capacity, giving 13.8 / 72.5 / 13.7 % draining / stable / filling.
+  - Leakage checks on the data: 2026-07-31 < 2026-08-01 and 2026-08-31 < 2026-09-01.
+  - 14 / 14 districts aligned; strong ties ≥ 9 trips per window. 429 s, 112 MB.
+- **P4.3 EDA:**
+  - Mean 2.95 departures per station-hour, variance 33.1, 44.6 % zero hours.
+  - Spearman with departures: prof_dep_mean 0.765, out_strength 0.627, humidity −0.29.
+- **P4.4 regression:**
+  - Departures champion: random forest, validation MAE 1.421. September MAE 1.460 (RMSE 2.99, R² 0.745) against the
+    seasonal naive forecast's 1.562: **6.6 % better**.
+  - Arrivals champion: gradient-boosted trees on absolute loss (validation 1.431 against the forest's 1.432).
+    September 1.467 against 1.566, 6.3 % better.
+  - **The 10 % target is not met.** The iteration trained GBT on absolute loss (for MAE). It did not help departures
+    (1.429 against 1.421) but won arrivals. Reported as it stands (Q61).
+- **P4.5 classification:**
+  - Champion: linear SVM, one-vs-rest. Validation macro-F1 0.5210 against the random forest's 0.5209.
+  - September macro-F1 0.519, accuracy 65.9 %. Baselines: seasonal naive 0.508, majority 0.283.
+  - Per-class F1: draining 0.381, stable 0.790, filling 0.386.
+- **P4.6 ablation** (September MAE of the random forest, departures):
+  - all features: 1.460;
+  - without GraphX: +1.6 %;
+  - without profiles: +6.4 %;
+  - without both: +26.3 %;
+  - without weather: +7.6 %.
+- **P4.7 champions:** TrainChampionJob reproduces the lab exactly (Δ 0.00 %):
+  - departures MAE 1.45950;
+  - arrivals MAE 1.46738;
+  - regime macro-F1 0.51883.
+
+  Three PipelineModels are in `data/models`, with `model-cards.json`. 341 s.
 🎓 Regression vs classification vs clustering · R², RMSE, MAE · reading a confusion matrix; precision vs recall ·
 overfitting and time-based validation · DT vs RF vs GBT · silhouette · StringIndexer, OneHotEncoder, VectorAssembler,
 StandardScaler, Pipeline.
@@ -295,8 +334,10 @@ Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink ann
   lights, KPI pucks, fact ticker, portal bento grid with the district sketch.
 - [ ] **P6.5 `/live` + `streaming` portal** — risk map with pulsing halos, alert ticker (SSE), KPIs, station drawer
   (status, forecast, archetype, community, PageRank), suggested moves as arcs, live/replay toggle.
-- [ ] **P6.6 `/models` + `models` portal** — leaderboards vs baselines, confusion matrix, predicted vs actual,
-  residuals, importances, ablation, archetype profiles + PCA, heat map.
+- [x] **P6.6 `/models` + `models` portal** — leaderboards vs baselines, confusion matrix, predicted vs actual,
+  residuals, importances, ablation, archetype profiles + PCA, heat map. Built as the `models` portal
+  (`/portal/models`, in the nav), with the leakage-safe windows timeline, the feature dictionary and the Scala ↔ lab
+  parity table.
 - [ ] **P6.7 `/cluster` + `/syllabus`** — live topology (brokers, partitions, leaders, ISR; Spark master, workers,
   apps), job timeline; traceability table in which every row opens its portal.
 - [ ] **P6.8 Polish** — ≥ 1280 px primary + tablet, WCAG AA contrast, reduced motion and reduced transparency,

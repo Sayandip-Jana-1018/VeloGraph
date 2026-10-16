@@ -19,6 +19,8 @@ object LakeTable {
   val Calendar: LakeTable       = LakeTable("silver/calendar", LakeSchemas.SilverCalendar)
   val StationHour: LakeTable    = LakeTable("gold/station_hour", LakeSchemas.GoldStationHour)
   val RouteEdges: LakeTable     = LakeTable("gold/route_edges", LakeSchemas.GoldRouteEdge)
+  val Archetypes: LakeTable     = LakeTable("gold/station_archetypes", LakeSchemas.GoldStationArchetype)
+  val MlFeatures: LakeTable     = LakeTable("gold/ml_features", LakeSchemas.GoldMlFeature)
   val StationMetrics: LakeTable = LakeTable("graph/station_metrics", LakeSchemas.GraphStationMetrics)
 }
 

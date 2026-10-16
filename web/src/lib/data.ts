@@ -102,6 +102,49 @@ export async function getSparkUiShots() {
   return files.filter((f) => f.endsWith(".png")).sort();
 }
 
+// ---- P4: machine learning (ARCHITECTURE §8) -------------------------------------------------------------------
+export async function getArchetypes() {
+  "use cache";
+  cacheLife("max");
+  return load("archetypes.json", S.Archetypes);
+}
+
+export async function getMlFeatures() {
+  "use cache";
+  cacheLife("max");
+  return load("ml-features.json", S.MlFeatures);
+}
+
+export async function getMlCorrelation() {
+  "use cache";
+  cacheLife("max");
+  return load("ml-correlation.json", S.MlCorrelation);
+}
+
+export async function getMlRegression() {
+  "use cache";
+  cacheLife("max");
+  return load("ml-regression.json", S.MlRegression);
+}
+
+export async function getMlClassification() {
+  "use cache";
+  cacheLife("max");
+  return load("ml-classification.json", S.MlClassification);
+}
+
+export async function getMlAblation() {
+  "use cache";
+  cacheLife("max");
+  return load("ml-ablation.json", S.MlAblation);
+}
+
+export async function getModelCards() {
+  "use cache";
+  cacheLife("max");
+  return load("model-cards.json", S.ModelCards);
+}
+
 /** Every station with its graph metrics, in PageRank order. */
 export async function getNetworkNodes() {
   "use cache";

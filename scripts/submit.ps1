@@ -34,6 +34,9 @@ $jobClasses = @{
     'rdd-fundamentals' = 'velograph.rdd.RddFundamentalsJob'
     'insights'        = 'velograph.sql.InsightsJob'
     'graph-metrics'   = 'velograph.graph.GraphMetricsJob'
+    'station-archetypes' = 'velograph.ml.StationArchetypesJob'
+    'feature-build'   = 'velograph.ml.FeatureBuildJob'
+    'train-champion'  = 'velograph.ml.TrainChampionJob'
 }
 if (-not $jobClasses.ContainsKey($Job)) {
     throw "Unknown job '$Job'. Known jobs: $(($jobClasses.Keys | Sort-Object) -join ', ')"
