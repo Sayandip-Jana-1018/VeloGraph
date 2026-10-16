@@ -205,9 +205,9 @@ data/
   lake/
     bronze/     trips (partition ym) · weather_hourly
     silver/     trips (partition start_date) · trips_quarantine (partition reason) · stations · weather_hourly
-    gold/       station_hour (partition date) · route_edges · station_profiles · ml_features (partition split)
+    gold/       station_hour (partition date) · route_edges · station_archetypes · ml_features (partition date)
     graph/      station_metrics · communities · flows_top · landmark_paths
-  models/       <model>/<version>/ (Spark ML PipelineModel) + model-card.json
+  models/       <model>/ (Spark ML PipelineModel, written by TrainChampionJob; cards in serving/model-cards.json)
   stream/       predictions (partition date) · trip_metrics
   checkpoints/  <streaming job>/
   serving/      *.json UI contracts · jobs/*.json · live/snapshot.json
@@ -269,8 +269,14 @@ member_share, ebike_share, is_self_loop`; 1,308,071 directed pairs. Peaks count 
 holiday) in the `velograph.gold.peaks` windows (07:00–09:59 and 16:00–18:59); `trips_weekend` counts Saturdays and
 Sundays.
 
-**gold.station_profiles** — `station_id, window_id, how (hour-of-week 0..167), dep_mean, arr_mean, dep_std, n_weeks`
-(holidays excluded).
+**gold.station_archetypes** — `station_id, window (profile-a | profile-b), trips, fitted, archetype, archetype_name,
+pca_x, pca_y`: each station's KMeans archetype in each profile window. The clusters are learned on profile-a and
+applied unchanged to profile-b ([ADR 013](adr/013-leakage-safe-graph-features-and-archetypes.md)).
+
+**gold.ml_features** — one row per station-hour of the fit (August) and test (September) splits, 3,486,672 rows:
+`station_id, ts_hour, split, is_validation`, the 31 features of §8.3, and the targets `departures, arrivals,
+net_flow, regime`, partitioned by `date`. Hour-of-week profiles (holidays excluded) are computed on the fly from
+each split's profile window, so there is no separate profile table.
 
 ## 6. Batch jobs
 
@@ -289,10 +295,10 @@ and out, Spark app id), which feeds the pipeline timeline and the report's bench
 | RddFundamentalsJob | raw CSV → `rdd-fundamentals.json` | textFile, map/filter/flatMap, reduceByKey vs groupByKey, join, persist levels, broadcast, accumulators, `toDebugString`, RDD → DataFrame | U1, U3, U4 |
 | InsightsJob | silver + gold → `insights/*.json` | temp views, 14 named `.sql` files: joins, groupBy, orderBy, window functions, `LIKE` / `RLIKE` | U4 |
 | GraphMetricsJob | route_edges + stations → `lake/graph/*`, `network-*.json` | see §7 | U3, CO6 |
-| StationArchetypesJob | gold.station_hour → archetypes, `archetypes.json` | KMeans, ClusteringEvaluator, PCA | U6, CO4 |
-| FeatureBuildJob | gold + graph + archetypes → gold.ml_features | window functions, trailing-window encodings, SQLTransformer | U3, CO4 |
+| StationArchetypesJob | gold.station_hour → gold.station_archetypes, `archetypes.json` | array higher-order functions, KMeans with restarts, ClusteringEvaluator (silhouette), StandardScaler + PCA | U6, CO4 |
+| FeatureBuildJob | gold + silver trips + archetypes → gold.ml_features, `ml-features.json` | trailing-window profiles, GraphX features per window (GraphFeatures), community alignment, approxQuantile (τ), data-level leakage checks | U3, CO4, CO6 |
 | *ML Lab (PySpark notebooks)* | gold.ml_features → leaderboards, ablation, heat map | see §8 | U6, CO4 |
-| TrainChampionJob | gold.ml_features → `models/*`, model cards | Pipeline, PipelineModel persistence | CO4 |
+| TrainChampionJob | gold.ml_features → `models/*`, `model-cards.json` | the lab's Pipeline rebuilt in Scala, typed params from config, PipelineModel persistence, parity check against the lab (±1 %) | CO4 |
 | ServingExportJob | lake → `serving/*.json` | small coalesced, schema-versioned writes | CO5 |
 
 ## 7. Graph analytics (GraphX)
@@ -374,7 +380,10 @@ unit-tested on toy graphs (`GraphAlgorithmsSpec`) and end to end on a synthetic 
 | Test | 1 – 30 Sep | final evaluation, never used for tuning |
 | Profile-L | trailing 8 weeks before go-live | live scoring |
 
-Every profile window ends before the window it feeds; `FeatureBuildJob` asserts this.
+Every profile window ends before the window it feeds. `MlConfig` refuses any other layout, and `FeatureBuildJob`
+checks it again on the data it reads. The graph and archetype features follow the same windows: GraphX is rerun on
+each profile window, and the archetype clusters are learned on profile A and applied to both
+([ADR 013](adr/013-leakage-safe-graph-features-and-archetypes.md)).
 
 ### 8.3 Features
 
@@ -382,9 +391,9 @@ Every profile window ends before the window it feeds; `FeatureBuildJob` asserts 
 |---|---|
 | Calendar | hour as sin/cos, day-of-week one-hot, is_weekend, is_holiday |
 | Weather | temp_c, apparent_temp_c, precip_mm, is_raining, wind_kmh, humidity_pct, cloud_pct |
-| Station | capacity, lat, lon, archetype (one-hot) |
-| Graph (GraphX) | pagerank_w, pr_am, pr_pm, pr_shift, in/out strength, imbalance_ratio, clustering_coef, community (indexed for trees, one-hot for linear models) |
-| Profile | prof_dep_mean, prof_arr_mean, prof_dep_std for station × hour-of-week, trailing window |
+| Station | capacity (median where GBFS lists none), lat, lon, archetype (indexed for trees, one-hot for linear models) |
+| Graph (GraphX, per profile window) | pagerank_w, pr_am, pr_pm, pr_shift, in/out strength, imbalance_ratio, clustering_coef, community (aligned across windows; indexed for trees, one-hot for linear models) |
+| Profile | prof_dep_mean, prof_arr_mean, prof_dep_std, prof_arr_std for station × hour-of-week over the trailing window (holidays excluded), has_profile (false: the network-wide profile stands in) |
 
 The feature dictionary is exported to `serving/ml-features.json`.
 
@@ -394,14 +403,17 @@ The feature dictionary is exported to `serving/ml-features.json`.
 |---|---|---|
 | Regression (departures, arrivals) | baselines: global mean, seasonal naive (= profile mean); LinearRegression (elastic net), DecisionTreeRegressor, RandomForestRegressor, GBTRegressor | R², RMSE, MAE; error by hour and archetype; residual plots |
 | Classification (regime) | baseline: majority class; LogisticRegression (multinomial), DecisionTree, RandomForest, NaiveBayes (Gaussian), LinearSVC via OneVsRest; class weights via `weightCol` | confusion matrix, accuracy, macro-F1, per-class precision/recall |
-| Clustering (archetypes) | KMeans, k = 3..10 chosen by silhouette; PCA 2-D for display | silhouette, cluster sizes, centroid profiles |
+| Clustering (archetypes) | KMeans on daily share profiles in 3-hour bins, best of 5 restarts per k, k = 3..10 by silhouette among the k whose smallest cluster holds ≥ 2 % of stations; PCA 2-D for display | silhouette, cluster sizes, centroid profiles |
 | Correlation | Pearson + Spearman (`ml.stat.Correlation`) | heat map |
 | Ablation | champion with/without graph features, with/without profiles | Δ MAE, Δ R² |
 
 ### 8.5 Ownership
 
-- The **PySpark ML Lab** notebooks run every algorithm above on `gold.ml_features` and write the leaderboards. They are
-  the source of truth for the comparison.
+- The **PySpark ML Lab** notebooks (`python/lab/01–04`, jupytext `.py` sources executed into `.ipynb`) run every
+  algorithm above on `gold.ml_features` and write the leaderboards. They are the source of truth for the comparison.
+  Every candidate trains on 1–24 August and is chosen on 25–31 August; each algorithm's chosen configuration is
+  refit on August and reported on September. Regression is tuned on departures, and arrivals reuse those
+  configurations. The classifiers use class weights `n / (k · n_class)` and are chosen on macro-F1.
 - The Scala **TrainChampionJob** retrains the selected algorithm and parameters (declared in config), saves
   `PipelineModel`s, and asserts its test metrics match the lab within ±1 %.
 - Each model card records algorithm, parameters, features, windows, metrics, training rows, Spark version, git SHA and
@@ -490,7 +502,9 @@ portals quote).
 | `rdd-fundamentals.json`, `dq-report.json`, `jobs/*.json` | batch jobs | Cluster |
 | `network-summary.json` (graph size, vertex-cut comparison, PageRank runs and rankings, AM/PM shift, strength, communities, components, triangles, paths, operator tour, timings), `network-nodes.json` (one row per station, all metrics), `network-flows.json` (top routes overall, AM and PM), `network-communities.json`, `network-paths.json` (hops to hubs, travel times and personalized PageRank per landmark), `network-pregel.json` (superstep-by-superstep PageRank on a hub neighbourhood) | GraphMetricsJob | Network, `pregel` / `network` / `graph-ops` portals |
 | `spark-ui.json` (applications, the RDD lab's jobs and shuffle stages with task-time quantiles, the insights job's widest SQL plan, Pregel superstep jobs, executors) | `velograph.ops.spark_ui_export`, from the history server's REST API | `spark-ui` portal |
-| `archetypes.json`, `ml-regression.json`, `ml-classification.json`, `ml-ablation.json`, `ml-correlation.json`, `model-cards.json` | ML Lab + jobs | Models |
+| `archetypes.json` (k selection, centres as hourly curves, PCA points, stability), `ml-features.json` (windows, leakage checks, τ, class balance, feature dictionary) | StationArchetypesJob, FeatureBuildJob | `models` portal; the labs read the dictionary |
+| `ml-correlation.json` (Lab 01), `ml-regression.json` (Lab 02: grid, tuning, leaderboards, errors by hour and archetype, calibration, importances), `ml-classification.json` (Lab 03: baselines, leaderboard, confusion matrices), `ml-ablation.json` (Lab 04) | PySpark ML lab notebooks | `models` portal |
+| `model-cards.json` (algorithm, parameters, features, windows, Scala vs lab metric, training rows and time, Spark version, git SHA) | TrainChampionJob | `models` portal |
 | `live-replay/*.json` | recorder → exporter | Live (offline mode) |
 
 Every file uses one envelope:
@@ -649,3 +663,4 @@ Open-Meteo.com (CC BY 4.0). Basemap © CARTO, © OpenStreetMap contributors.
 | [010](adr/010-kafka-topic-naming.md) | Topic names use hyphens, never underscores | Kafka metric names treat `.` and `_` alike |
 | [011](adr/011-inkglass-design-and-portals.md) | "Inkglass" design language; one evidence portal per module | the user wants every module shown in the UI, maximalist + neumorphic + glass + hand-drawn |
 | [012](adr/012-inkglass-presets-frame-budget-spark-ui.md) | Colour presets; glass without live blur under a frame budget; the Spark UI's charts redrawn from its REST API | design feedback (16 Oct): presets, real Spark dashboards, no scroll lag (frame cost 25–30 ms → 6–7.5 ms) |
+| [013](adr/013-leakage-safe-graph-features-and-archetypes.md) | Graph features recomputed per profile window; archetypes learned once and applied to both windows | the P3 graph includes the test month; cluster and district ids must mean the same in fit and test rows |

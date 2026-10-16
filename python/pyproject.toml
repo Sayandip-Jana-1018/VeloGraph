@@ -20,7 +20,13 @@ dev = [
     "ruff>=0.9",
 ]
 spark = ["pyspark==3.5.8", "pyarrow>=17", "pandas>=2.2", "numpy>=1.26"]
-lab = ["jupyterlab>=4.3", "ipykernel>=6.29", "matplotlib>=3.9", "seaborn>=0.13"]
+lab = [
+    "jupyterlab>=4.3",
+    "ipykernel>=6.29",
+    "matplotlib>=3.9",
+    "seaborn>=0.13",
+    "jupytext>=1.17",
+]
 api = ["fastapi>=0.143", "uvicorn[standard]>=0.34", "sse-starlette>=2.2"]
 
 [tool.uv]
@@ -41,6 +47,12 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PTH", "LOG"]
+# Typographic characters the notebooks and docs use on purpose: en dash, minus sign, multiplication sign, rho.
+allowed-confusables = ["–", "−", "×", "ρ"]
+
+[tool.ruff.lint.per-file-ignores]
+# A notebook cell that ends in a bare expression displays it.
+"lab/*" = ["B018"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -77,6 +77,9 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Bronze + silver | `.\scripts\submit.ps1 bronze-trips` (`-- --months 202609`) · `silver-trips -DriverMemory 6g` · `silver-stations` · `silver-weather` · `silver-calendar` |
 | ✅ Gold, RDD, SQL | `.\scripts\submit.ps1 gold-station-hour -DriverMemory 6g` · `gold-routes` · `rdd-fundamentals` · `insights` |
 | ✅ GraphX suite | `.\scripts\submit.ps1 graph-metrics -DriverMemory 6g` (~8 min) → `lake/graph/station_metrics` + `serving/network-*.json` |
+| ✅ ML features | `.\scripts\submit.ps1 station-archetypes -DriverMemory 6g` (~3 min) · `feature-build -DriverMemory 7g` (~7 min) → `gold/station_archetypes`, `gold/ml_features` |
+| ✅ ML lab | `cd python; uv run jupytext --to ipynb --execute lab/01_eda.py` (then `02_regression`, `03_classification`, `04_ablation`; one at a time: each takes an 8 GB driver) |
+| ✅ Champion models | `.\scripts\submit.ps1 train-champion -DriverMemory 8g` (~3 min) → `data/models/*`, `serving/model-cards.json`; fails unless it reproduces the lab within 1 % |
 | ✅ History server | `docker compose -f infra/docker-compose.yml --profile history up -d spark-history` → http://localhost:18080 |
 | ✅ Spark UI screenshots | `cd python; uv run python -m velograph.ops.ui_screenshots` (history server up) → `docs/assets/spark-ui/` |
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
@@ -97,6 +100,9 @@ Windows gotchas, learned the hard way:
 - `Set-Content -Encoding utf8` in PowerShell 5.1 writes a BOM, which the Scala REPL rejects as illegal characters;
   write files for tools with `[IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding $false))`.
 - `spark-shell -i file` stays open after the file; end rehearsal copies with `sys.exit(0)`.
+- `jupytext --sync` reads files in the Windows code page; run it with `PYTHONUTF8=1`.
+- PySpark's `OneVsRestModel` scores with Python UDFs, and a Python worker can drop its socket on Windows
+  ("Connection reset by peer"). Lab 03 writes one-vs-rest out with built-in column functions instead.
 
 ## Engineering conventions
 
@@ -155,7 +161,16 @@ push without approval.
   portals over real exports, six colour presets, a two-column hero with the city of lights, and the Spark UI's charts
   redrawn from the history server's REST API (`spark-ui.json`). The design was approved by the user on 16 Oct.
   Scrolling keeps the ADR 012 frame budget (frame cost 25–30 ms → 6–7.5 ms).
-- **Next task:** P4.1 `StationArchetypesJob` (ML), then the rest of P4. Stop the Spark containers before heavy host
-  runs. The GBFS recorder keeps running in the background.
+- **P4 done 16 Oct** (evidence in ROADMAP):
+  - archetypes (k = 3);
+  - leakage-safe `gold/ml_features`, with GraphX rerun per window (ADR 013);
+  - Labs 01–04 in `python/lab/`;
+  - champions: a random forest for departures, absolute-loss GBT for arrivals and a one-vs-rest linear-SVM regime
+    classifier, which the Scala `TrainChampionJob` reproduces exactly.
+
+  The demand models beat the seasonal naive forecast by 6.6 % (departures) and 6.3 % (arrivals). The 10 % target is
+  not met, and this is reported honestly. The `models` portal shows it all.
+- **Next task:** P5.1 Kafka topics. Docker Desktop must be running for P5 (it was down after the 16 Oct reboot).
+  Stop the Spark containers before heavy host runs. The GBFS recorder keeps running in the background.
 - **Open questions:** none. Option for the user: raising `.wslconfig` `memory=` to 8 GB would add cluster headroom
   (ADR 009); not needed so far.

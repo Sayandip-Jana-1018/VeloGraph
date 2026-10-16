@@ -1,7 +1,7 @@
 // Brings the batch pipeline's results into the website (ARCHITECTURE §10):
 //   data/serving/**/*.json      -> web/public/data/        (what every portal reads)
 //   docs/assets/spark-ui/*.png  -> web/public/spark-ui/    (the Spark UI evidence wall)
-//   excerpts of spark/src/**    -> web/src/generated/snippets.json  ("How Spark did it" panels)
+//   excerpts of spark/src/** and python/lab/** -> web/src/generated/snippets.json  ("How Spark did it" panels)
 //   MapLibre's web worker       -> web/public/maplibre/
 // Run from web/ with `pnpm sync` (scripts/sync-web-data.ps1 does the same from the repository root).
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -31,6 +31,11 @@ const SNIPPETS = [
   { id: "network-strength", file: `${scala}/graph/GraphStructure.scala`, start: "def strength(", end: /TripletFields\.EdgeOnly/ },
   { id: "graphops-group-edges", file: `${scala}/graph/OperatorTour.scala`, start: "// groupEdges: split", end: /groupEdges\(_ \+ _\)/ },
   { id: "graphops-partitioning", file: `${scala}/graph/GraphStructure.scala`, start: "def partitioning[", end: /partitioned\.unpersist/ },
+  { id: "ml-kmeans-selection", file: `${scala}/ml/StationArchetypesJob.scala`, start: "val candidates = (c.kMin to c.kMax)", end: /val \(k, silhouette, _, model\)/ },
+  { id: "ml-leakage-check", file: `${scala}/ml/FeatureBuildJob.scala`, start: "val lastProfileDay", end: /require\(check\.passed/ },
+  { id: "ml-champion-parity", file: `${scala}/ml/TrainChampionJob.scala`, start: "val lab   = labMetric", end: /^      \)$/ },
+  { id: "ml-lab-pipeline", file: "python/lab/02_regression.py", start: "def pipeline(algo, params, target", end: /return Pipeline/ },
+  { id: "ml-class-weights", file: "python/lab/03_classification.py", start: "def weighted(df):", end: /return df\.withColumn/ },
 ];
 
 function copyTree(from, to, keep) {
@@ -53,7 +58,8 @@ function excerpt({ id, file, start, end }) {
   if (to < 0) throw new Error(`${id}: no line after ${from + 1} matches ${end} in ${file}`);
   const body = lines.slice(from, to + 1);
   while (body.length && !body.at(-1).trim()) body.pop(); // an empty end marker should not ship a blank line
-  return { file, startLine: from + 1, endLine: from + body.length, code: dedent(body) };
+  const lang = file.endsWith(".py") ? "python" : "scala";
+  return { file, lang, startLine: from + 1, endLine: from + body.length, code: dedent(body) };
 }
 
 copyTree(join(repo, "data/serving"), join(web, "public/data"), /\.json$/i);

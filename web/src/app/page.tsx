@@ -12,6 +12,7 @@ import {
   getDqReport,
   getInsights,
   getJobReports,
+  getMlRegression,
   getNetworkSummary,
   getRddReport,
   getSparkUi,
@@ -21,7 +22,7 @@ import { cn } from "@/lib/cn";
 import { PORTALS, UPCOMING, type PortalId } from "@/portals/registry";
 
 export default async function Home() {
-  const [dq, net, rdd, insights, jobs, city, ui] = await Promise.all([
+  const [dq, net, rdd, insights, jobs, city, ui, reg] = await Promise.all([
     getDqReport(),
     getNetworkSummary(),
     getRddReport(),
@@ -29,6 +30,7 @@ export default async function Home() {
     getJobReports(),
     getCityLights(),
     getSparkUi(),
+    getMlRegression(),
   ]);
   const shuffle = Object.fromEntries(rdd.data.shuffle.map((s) => [s.operation, s.shuffleBytes]));
   const shuffleRatio = shuffle.groupByKey / shuffle.reduceByKey;
@@ -48,6 +50,7 @@ export default async function Home() {
     pregel: `${net.data.pagerank.weighted.supersteps} supersteps to converge`,
     network: `Q = ${fixed(c.modularity, 3)} · ${c.communities} districts`,
     "graph-ops": `${fixed(twoD.replicationFactor, 1)} vs ${fixed(random.replicationFactor, 1)} copies`,
+    models: `${fixed(reg.data.targets.departures.improvementVsNaive, 0)} % under seasonal naive`,
   };
   const facts = [
     `${int(dq.data.validRows)} clean trips`,
@@ -67,9 +70,10 @@ export default async function Home() {
     lake: "lg:col-span-4",
     "rdd-lab": "lg:col-span-4",
     sql: "lg:col-span-4",
-    "spark-ui": "lg:col-span-12",
+    "spark-ui": "lg:col-span-6",
+    models: "lg:col-span-6",
   };
-  const order: PortalId[] = ["network", "pregel", "graph-ops", "lake", "rdd-lab", "sql", "spark-ui"];
+  const order: PortalId[] = ["network", "pregel", "graph-ops", "lake", "rdd-lab", "sql", "spark-ui", "models"];
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
@@ -223,7 +227,7 @@ export default async function Home() {
           })}
         </div>
 
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {UPCOMING.map((u, i) => (
             <Reveal key={u.title} delay={0.05 * i}>
               <div className="h-full rounded-[var(--radius-card)] border border-dashed border-white/15 p-7 text-center text-fg-3">

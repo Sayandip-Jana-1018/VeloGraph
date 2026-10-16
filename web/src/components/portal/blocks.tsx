@@ -44,16 +44,16 @@ export function Act({
 export type SnippetId = keyof typeof snippets;
 
 /** Syntax highlighting, done once at build time (shiki reads the clock, so it must be cached to prerender). */
-async function highlight(code: string): Promise<string> {
+async function highlight(code: string, lang: string): Promise<string> {
   "use cache";
   cacheLife("max");
-  return codeToHtml(code, { lang: "scala", theme: "tokyo-night" });
+  return codeToHtml(code, { lang, theme: "tokyo-night" });
 }
 
-/** "How Spark did it": a real excerpt of the Scala code, extracted at sync time, highlighted on the server. */
+/** "How Spark did it": a real excerpt of the Scala or PySpark code, extracted at sync time, highlighted on the server. */
 export async function CodePanel({ id, caption }: { id: SnippetId; caption: string }) {
   const snippet = snippets[id];
-  const html = await highlight(snippet.code);
+  const html = await highlight(snippet.code, snippet.lang);
   return (
     <Glass variant="inset" className="code-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 px-5 py-3">
