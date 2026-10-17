@@ -14,7 +14,7 @@ import { InsightGallery, type InsightView } from "./insight-gallery";
 async function highlightSql(sql: string): Promise<string> {
   "use cache";
   cacheLife("max");
-  return codeToHtml(sql, { lang: "sql", theme: "tokyo-night" });
+  return await codeToHtml(sql, { lang: "sql", theme: "tokyo-night" });
 }
 
 export async function SqlPortal() {

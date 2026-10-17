@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 import { Glass, KpiPuck } from "@/components/inkglass/surfaces";
 import { cn } from "@/lib/cn";
@@ -165,13 +165,23 @@ function MoveList({ moves, onPick }: { moves: LiveMove[]; onPick: (id: string) =
   );
 }
 
+/** `?station=<id>` (from the ⌘K search) selects a station; read after hydration, so the page still prerenders. */
+const subscribeToUrl = (onChange: () => void) => {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+};
+const stationInUrl = () => new URLSearchParams(window.location.search).get("station");
+
 /**
  * The live operations view: the risk map, alerts and suggested moves of the latest micro-batch. `connect` false
  * shows the recorded snapshot only (inside a portal, or when the site is served without a backend).
  */
 export function LiveBoard({ initial, connect = true }: { initial: Snapshot; connect?: boolean }) {
   const { snapshot, alerts, connection } = useLive(initial, connect);
-  const [selected, setSelected] = useState<string | null>(null);
+  const fromUrl = useSyncExternalStore(subscribeToUrl, stationInUrl, () => null);
+  // Undefined until the visitor picks (or closes) a station; until then the address decides.
+  const [picked, setSelected] = useState<string | null | undefined>(undefined);
+  const selected = picked === undefined ? fromUrl : picked;
   const byId = useMemo(() => new Map(snapshot.stations.map((s) => [s.id, s])), [snapshot.stations]);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -200,7 +210,7 @@ export function LiveBoard({ initial, connect = true }: { initial: Snapshot; conn
         <KpiPuck label="Suggested moves" value={int(k.moves)} note={`${int(k.bikesToMove)} bikes in all`} />
         <KpiPuck label="Stations reporting" value={int(k.reporting)} note={`${int(k.offline)} offline`} />
       </div>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <figure className="map-surface relative h-[36rem] overflow-hidden rounded-[var(--radius-card)]">
           <LiveMap stations={snapshot.stations} moves={snapshot.moves} selected={selected} onSelect={setSelected} />
           <Legend counts={counts} />

@@ -364,9 +364,10 @@ Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink ann
   `spark-ui` (the history server's charts redrawn from its REST API, plus pinned screenshots), `pregel` (superstep
   step-through), `network` (PageRank map, AM ↔ PM morph, communities, travel times, "where riders go"), `graph-ops`
   (operator cards, vertex-cut comparison).
-- [ ] **P6.4 `/` Home** — night-time trip replay hero (deck.gl TripsLayer on one real evening), KPI band, scroll story
-  of the pipeline whose chapters open the portals, ⌘K station search. _So far:_ two-column hero with the city of
-  lights, KPI pucks, fact ticker, portal bento grid with the district sketch.
+- [x] **P6.4 `/` Home** — night-time trip replay hero (one real evening, drawn on the hero's canvas rather than with
+  deck.gl's TripsLayer: [ADR 015](adr/015-home-replay-pipeline-story-station-search.md)), KPI band, scroll story of
+  the pipeline whose chapters open the portals, ⌘K station search. The search sits in the header of every page and
+  links a station to the live map (`/live?station=<id>`).
 - [x] **P6.5 `/live` + `streaming` portal** — risk map with pulsing halos, alert ticker (SSE), KPIs, station drawer
   (status, forecast, archetype, community, PageRank), suggested moves as arcs, live/replay toggle. The status pill
   shows live, replay or recorded; replay is chosen by starting the job with `--source replay`. The portal has 5
@@ -383,11 +384,66 @@ Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink ann
     It also has the 14-job pipeline as a waterfall and the host-versus-cluster split.
   - **Syllabus:** units I–VI and CO4–CO6, each with one measured number and links that open its portals; the
     five practicals; Unit II shown in six excerpts of our own Scala.
-- [ ] **P6.8 Polish** — ≥ 1280 px primary + tablet, WCAG AA contrast, reduced motion and reduced transparency,
+- [x] **P6.8 Polish** — ≥ 1280 px primary + tablet, WCAG AA contrast, reduced motion and reduced transparency,
   loading/empty/error/offline states, Lighthouse ≥ 90 on non-map pages.
 
 **Gate C:** every page and portal renders real exports; the site works with the gateway down; the production build
-passes.
+passes. **Met on 17 Oct**: every audit below ran on the production build with the gateway down.
+**Evidence (P6.4 and P6.8, 17 Oct):**
+- **Hero replay** (`HeroTripsJob`, 12.6 s): Thursday 17 September 16:30–19:30.
+  - 53,887 trips, of which 10,694 are shown (one in five, by ride-id hash), over 1,929 stations.
+  - Peak: 4,779 rides under way at 17:46.
+  - The export is 260 KB, 96 KB gzipped.
+- **Pipeline story:** 8 stops, every number read from the exports. Checked in headless Edge: clicking a stop
+  centres its chapter and lights it, and scrolling lights the stops in turn.
+- **Station search:** an index of 2,490 stations, 207 KB (the network file is 1.7 MB).
+- **Layout:** 14 pages × 4 viewports (1280 × 800, 1024 × 768, 768 × 1024, 390 × 844) in headless Edge. Nothing
+  overflows sideways, and the only console error is the 404 page's own 404. Fixed on the way:
+  - the header overflowed at 1024, 768 and 390 px once the search button was in it; below 1024 px the nav is now
+    a menu;
+  - 44 responsive grids had no base column, so a wide table or line could widen the page;
+  - a `Ledger` key collided;
+  - the favicon was missing.
+- **Reduced motion:** reveals and counters render the same on the server and in the browser. With reduced motion
+  on, they had caused 36 attribute and 12 text hydration mismatches. Smooth scrolling is off, and the hero shows its
+  busiest minute.
+- **Reduced transparency**, emulated through the DevTools protocol: glass and the frosted header turn solid
+  `ink-850` and lose the backdrop blur. Without it, the header is 62 % opaque with a 16 px blur.
+- **States:** a branded 404 page (`not-found.tsx`) and an error boundary with Try again (`error.tsx`), on top of
+  each view's own loading, empty, error and offline states.
+- **Lighthouse 13.5** (desktop preset, production build) on the 10 pages without a WebGL map:
+  - performance 93–98, accessibility 100, SEO 100;
+  - best practices 100, except 96 on `/cluster`: the browser logs the gateway probe failing while the gateway is
+    down, by design.
+
+  The accessibility fixes: names on the slider thumb and the Pregel stations (now keyboard buttons), header cells
+  in the ledgers, hidden text instead of `aria-label` on counters, and an `h2` before the live board. WCAG AA
+  contrast passes on every audited page.
+- **Contrast in every preset**, computed from the tokens in `globals.css`: across all six presets, every text
+  token (`fg`, `fg-2`, `fg-3`, `marker`) keeps at least 5.2 : 1 on every surface up to the lightest, `ink-700`.
+  The minimum is Nebula's `fg-3`; AA needs 4.5 : 1.
+
+  The three map pages: `/live` 70 / 100 / 96 / 100, `/portal/network` 54 / 100 / 100 / 100, `/portal/streaming`
+  54 / 100 / 96 / 100.
+- **Scrolling** (`scroll_bench`, production build):
+
+  | Page | Mean frame | p95 | Slow frames |
+  |---|---|---|---|
+  | Home, with the replay and the pipeline story | 6.3 ms | 6.4 ms | 0 % |
+  | `rdd-lab` | 6.8 ms | 11.2 ms | 0.7 % |
+  | `sql` | 7.3 ms | 12.1 ms | 0.8 % |
+  | `network` | 7.6 ms | 12.2 ms | 1.5 % |
+- **Streaming, re-recorded:** the drills' short runs had overwritten the Gate B run's progress file, so a fresh
+  32-minute run (17 Oct, 13:53–14:26 UTC, Docker cluster) replaced it.
+  - 63 micro-batches, 11,496 rows in, 257 alerts.
+  - Broker → snapshot p50 17.6 s, p95 36.8 s (max 119.1 s), over the 31 batches with data.
+  - The producer delivered 25,394 messages with 0 failures.
+
+  The streaming portal and the home page now show this run.
+- **Restart fix:** a restarted scoring job now reads back risks only from a snapshot under 35 minutes old.
+  - Before the fix, a fresh run read the risks of an 8-hour-old snapshot, and its first batch raised 259 alerts.
+  - After it, a restart after a 3-minute stop resumed with 11 real alerts.
+- **Build:** 31 static pages, with the 404 page and the icon.
 **Evidence (P6.7, 17 Oct):**
 - **Cluster recording:** both streaming apps running side by side at 2 cores each, so both workers were full
   (2 / 2 cores, 768 / 900 MB); 9 applications finished on the cluster.
@@ -410,6 +466,10 @@ passes.
   - live backdrop blurs in the RDD lab fell from 21 to 3.
 
   Measured on the home page and the `rdd-lab`, `sql` and `network` overlays.
+
+🎓 Server vs client components · static prerendering from JSON, which keeps the demo offline-safe · SSE vs
+polling · IntersectionObserver vs scroll handlers · compositor-only animation (`transform`, `opacity`) and the
+16.7 ms frame · WCAG AA contrast, accessible names, reduced motion · what Lighthouse measures (FCP, LCP, TBT, CLS).
 
 ### P7 · Hardening & automation — D8
 

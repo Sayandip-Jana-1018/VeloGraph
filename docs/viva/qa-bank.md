@@ -625,3 +625,45 @@ leadership back, which is why the brokers lead 9, 9 and 8 partitions.
 So the 14 batch jobs (38.4 minutes end to end) run on the host with `local[20]` and write compact gold tables. The
 cluster runs the streams, which read those tables and the Kafka topics. It is the same jar either way; only the
 configuration changes.
+
+## P6.4 and P6.8 · Home page, station search, polish
+
+**Q84. How is the trip replay on the home page made, and is it real?**
+Every streak is a real trip from Thursday 17 September, 16:30–19:30, read from the silver table by `HeroTripsJob`.
+- **Sample:** one trip in five is drawn. The sample is picked by a hash of the ride id (`pmod(xxhash64(ride_id),
+  5) = 0`), so a re-run picks the same 10,694 of the 53,887 trips.
+- **Counter:** the rides under way are counted from every trip. `sequence` lists the minutes each ride spans,
+  `explode` makes one row per minute, and a `groupBy` counts them. The peak is 4,779 at 17:46.
+- **Drawing:** the page replays it at 120× on a 2D canvas. Only the trips under way at that moment are drawn.
+
+**Q85. How does the ⌘K search work without a server?**
+`pnpm sync` builds a 207 KB index of all 2,490 stations from two exports: name, position, docks, PageRank rank,
+district and archetype. The dialog downloads it the first time it opens and searches in the browser:
+- every word of the query must appear in the name;
+- names where those words start a word come first, then the higher PageRank.
+
+A station's live state comes from the gateway when it is up, and from the recorded snapshot when it is not. So the
+search works offline too.
+
+**Q86. How does the pipeline story know which stop you are reading, without slowing the scroll?**
+An IntersectionObserver watches a thin band across the middle of the screen. The browser reports when a chapter
+crosses it, so no code runs while you scroll. The change is a few attributes on the line's stops and one `scale` on
+the travelled track, and the compositor animates that.
+
+**Q87. A restarted streaming job reads back the last snapshot's risks. Why only from a recent snapshot?**
+Alerts fire when a station's state changes between two batches. After a restart, comparing with the last snapshot
+avoids sending the same alerts again. But a snapshot from hours earlier belongs to another run: comparing with it
+made the first batch raise 259 "changes" at once.
+
+So the job reads the risks back only from a snapshot younger than the 35-minute bootstrap window. A rerun after a
+three-minute stop resumed cleanly, with 11 real alerts in its first batch.
+
+**Q88. How do you know the site is accessible and works on a tablet?**
+It was measured, not eyeballed, on the production build with the gateway down:
+- **Lighthouse 13.5:** accessibility 100 and performance 93–98 on the 10 pages without a WebGL map. Its accessibility
+  checks are axe-core's, including WCAG AA colour contrast.
+- **Layout:** a Playwright script loaded 14 pages at 1280, 1024, 768 and 390 px wide, looking for anything wider
+  than the screen and for console errors. It found the header overflowing below 1280 px, so the nav became a menu
+  below 1024 px.
+- **Reduced motion:** counters and reveals render the same on the server and in the browser, the hero shows one
+  still minute, and smooth scrolling is off.

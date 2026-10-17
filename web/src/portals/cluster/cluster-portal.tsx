@@ -48,7 +48,7 @@ export async function ClusterPortal() {
             </VivaNote>
           }
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {UIS.map((u) => (
               <a key={u.name} href={u.url} target="_blank" rel="noreferrer" className="block">
                 <Glass variant="inset" className="h-full p-4 transition-colors hover:bg-white/6">
@@ -92,7 +92,7 @@ export async function ClusterPortal() {
         title="Where each job runs, and why"
         lede="The same jar runs in both places; only the configuration changes (ARCHITECTURE §3). Scanning gigabytes of Parquet goes fastest on the laptop's own disk and 24 threads. The cluster is where the streams live and where the distributed run is seen in the Spark UIs."
       >
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Glass variant="inset" className="p-5 text-sm text-fg-2">
             <p className="font-display text-base font-bold text-fg">On the host · local[20]</p>
             <ul className="mt-2 space-y-1">

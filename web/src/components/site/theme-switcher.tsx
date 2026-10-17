@@ -40,7 +40,7 @@ export function ThemeSwitcher() {
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
-        className="clay flex items-center gap-2 rounded-full py-2 pr-4 pl-2.5 text-sm font-semibold text-fg hover:text-marker"
+        className="clay flex items-center gap-2 rounded-full py-2 pr-2.5 pl-2.5 text-sm font-semibold text-fg hover:text-marker sm:pr-4"
         aria-label={`Colour theme: ${current.name}`}
       >
         <span className="flex -space-x-1.5">
@@ -48,7 +48,7 @@ export function ThemeSwitcher() {
             <span key={c} className="size-4 rounded-full ring-2 ring-ink-900" style={{ background: c }} />
           ))}
         </span>
-        {current.name}
+        <span className="hidden sm:inline">{current.name}</span>
       </Popover.Trigger>
       <AnimatePresence>
         {open && (

@@ -81,7 +81,6 @@ export function ClaySlider({
 }) {
   return (
     <Slider.Root
-      aria-label={label}
       value={[value]}
       min={min}
       max={max}
@@ -92,7 +91,10 @@ export function ClaySlider({
       <Slider.Track className="clay-well relative h-3 grow overflow-hidden rounded-full">
         <Slider.Range className="absolute h-full rounded-full bg-gradient-to-r from-violet/70 to-marker/80" />
       </Slider.Track>
-      <Slider.Thumb className="clay block size-6 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-marker" />
+      <Slider.Thumb
+        aria-label={label}
+        className="clay block size-6 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-marker"
+      />
     </Slider.Root>
   );
 }

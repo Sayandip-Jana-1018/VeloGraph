@@ -112,7 +112,7 @@ export function PregelStepper({ data }: { data: Data }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <Glass variant="inset" className="relative overflow-hidden p-2">
           <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`Superstep ${now.superstep} of weighted PageRank on ${data.stations.length} stations`}>
             <defs>
@@ -144,7 +144,21 @@ export function PregelStepper({ data }: { data: Data }) {
               const r = radius(now.ranks[i]);
               const halted = step > 0 && !now.updated[i];
               return (
-                <g key={s.id} onClick={() => setFocus(i)} className="cursor-pointer" role="button" aria-label={`Focus ${s.name}`}>
+                <g
+                  key={s.id}
+                  onClick={() => setFocus(i)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setFocus(i);
+                    }
+                  }}
+                  tabIndex={0}
+                  className="cursor-pointer"
+                  role="button"
+                  aria-pressed={i === focus}
+                  aria-label={`Focus ${s.name}`}
+                >
                   <circle cx={x} cy={y} r={r + 7} fill="transparent" />
                   <circle
                     cx={x}
@@ -156,10 +170,10 @@ export function PregelStepper({ data }: { data: Data }) {
                     strokeWidth={i === focus ? 3 : 1.5}
                     strokeDasharray={halted ? "3 3" : undefined}
                   />
-                  <text x={x} y={y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--color-fg)">
+                  <text aria-hidden x={x} y={y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--color-fg)">
                     {fixed(now.ranks[i], 2)}
                   </text>
-                  <text x={x} y={y + r + 18} textAnchor="middle" className="font-hand" fontSize={17} fill="var(--color-chalk)" stroke="var(--color-ink-950)" strokeWidth={4} paintOrder="stroke">
+                  <text aria-hidden x={x} y={y + r + 18} textAnchor="middle" className="font-hand" fontSize={17} fill="var(--color-chalk)" stroke="var(--color-ink-950)" strokeWidth={4} paintOrder="stroke">
                     {short(s.name)}
                   </text>
                 </g>

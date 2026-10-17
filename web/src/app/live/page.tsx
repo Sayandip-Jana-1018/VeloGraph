@@ -38,11 +38,13 @@ export default async function LivePage() {
         </p>
       </header>
       <div className="mt-10">
+        {/* The board's panels are h3s: in the streaming portal they sit under an act's h2, here under this one. */}
+        <h2 className="sr-only">Every station now</h2>
         <LiveBoard initial={snapshot} />
       </div>
       <p className="mt-8 text-center text-sm text-fg-3">
         How the stream works, with its micro-batches, watermarks and failure drills:{" "}
-        <Link href="/portal/streaming" className="text-marker underline-offset-4 hover:underline">
+        <Link href="/portal/streaming" className="text-marker underline decoration-marker/40 underline-offset-4 hover:decoration-marker">
           open the streaming portal
         </Link>
         .

@@ -8,7 +8,7 @@ import { BLUE_RAMP, DIVERGING, SERIES } from "@/components/charts/theme";
 export type RGBA = [number, number, number, number];
 
 const rgb = (hex: string): [number, number, number] => {
-  const n = parseInt(hex.slice(1), 16);
+  const n = Number.parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 const mix = (a: string, b: string, t: number): [number, number, number] => {

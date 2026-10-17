@@ -54,7 +54,7 @@ export async function LakePortal() {
         title="Four layers, each one cleaner"
         lede="A medallion lake: bronze keeps every raw row, silver keeps only valid trips (and explains every one it drops), gold reshapes them for analysis, and the graph layer adds GraphX metrics."
       >
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
           {stages.map((s, i) => (
             <div key={s.name} className="relative">
               <Glass className="h-full p-5">

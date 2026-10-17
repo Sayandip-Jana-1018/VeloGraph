@@ -311,7 +311,7 @@ and out, Spark app id), which feeds the pipeline timeline and the report's bench
 | *ML Lab (PySpark notebooks)* | gold.ml_features → leaderboards, ablation, heat map | see §8 | U6, CO4 |
 | LiveFeaturesJob | gold + silver trips + archetypes + ml_features → gold.live_stations, gold.live_profiles, `live-features.json` | GraphX per window, community alignment, data-level leakage check for the live window | CO4, CO6 |
 | TrainChampionJob | gold.ml_features → `models/*`, `model-cards.json` | the lab's Pipeline rebuilt in Scala, typed params from config, PipelineModel persistence, parity check against the lab (±1 %) | CO4 |
-| ServingExportJob | lake → `serving/*.json` | small coalesced, schema-versioned writes | CO5 |
+| HeroTripsJob | silver.trips + silver.stations → `hero-trips.json` | `sequence` + `explode` for the rides under way per minute, a repeatable sample by `pmod(xxhash64(ride_id), 5)`, bounded collects | CO5 |
 
 ## 7. Graph analytics (GraphX)
 
@@ -537,7 +537,8 @@ portals quote).
 
 | File | Producer | Page |
 |---|---|---|
-| `overview.json`, `hero-trips.json` (one real evening, sampled) | ServingExportJob | Home |
+| `hero-trips.json` (one real evening: its stations, one trip in five, and the rides under way per minute counted from all of them) | HeroTripsJob | Home hero |
+| `station-index.json` (one row per station: name, position, docks, PageRank rank, district, archetype, trips out and in, AM/PM shift) | `pnpm sync`, from `network-nodes.json` and `archetypes.json` | ⌘K station search |
 | `insights/<id>.json`, `insights/index.json` | InsightsJob | Insights |
 | `rdd-fundamentals.json`, `dq-report.json`, `jobs/*.json` | batch jobs | Cluster |
 | `network-summary.json` (graph size, vertex-cut comparison, PageRank runs and rankings, AM/PM shift, strength, communities, components, triangles, paths, operator tour, timings), `network-nodes.json` (one row per station, all metrics), `network-flows.json` (top routes overall, AM and PM), `network-communities.json`, `network-paths.json` (hops to hubs, travel times and personalized PageRank per landmark), `network-pregel.json` (superstep-by-superstep PageRank on a hub neighbourhood) | GraphMetricsJob | Network, `pregel` / `network` / `graph-ops` portals |
@@ -584,7 +585,7 @@ motion, deck.gl 9 + MapLibre 6 via react-map-gl 8 (CARTO Dark Matter basemap, no
 
 | Route | Purpose | Signature moment |
 |---|---|---|
-| `/` | Story + headline KPIs | night-time animated trips over NYC (TripsLayer) |
+| `/` | Story + headline KPIs (built) | one real evening's trips replayed over the city of lights; the pipeline as a subway line whose stops open the portals |
 | `/live` | Operations (built) | every station by state (solid = now, pulsing ring = within 60 min), alert ticker over SSE, suggested moves as arcs, station drawer; the recorded snapshot when the gateway is down |
 | `/network` | GraphX | AM ↔ PM PageRank morph slider, communities, travel-time isochrones |
 | `/models` | MLlib | leaderboards vs baselines, confusion matrix, ablation, archetype profiles, heat map |
@@ -625,9 +626,22 @@ only `transform` and `opacity`. While a portal is open, `<html data-portal-open>
 Canvas and WebGL loops run only on screen, charts are created near the viewport, and far-off portal acts use
 `content-visibility: auto`.
 
-**Home.** The hero has two columns: the claim on the left and a north-up "city of lights" canvas on the right
-(stations sized by PageRank, top-40 hubs, comets on the 500 busiest routes). Below it come the KPI pucks, a fact
-ticker and the portal bento grid, whose network card carries a server-rendered sketch of the 15 districts.
+**Home** ([ADR 015](adr/015-home-replay-pipeline-story-station-search.md)). The hero has two columns: the claim
+on the left and a north-up "city of lights" canvas on the right, with stations sized by PageRank and the top-40
+hubs.
+- **Replay:** the canvas replays one real evening, Thursday 17 September 16:30–19:30, from `hero-trips.json`. One
+  trip in five leaves when it really left, at 120×. A clock and the count of rides under way sit in the corner.
+- **Fallbacks:** with reduced motion it shows the busiest minute. Without the export it shows comets on the 500
+  busiest routes.
+
+Below the hero come the KPI pucks and a fact ticker. Then the pipeline story: eight stops on a subway line that
+stays in view on wide screens, each chapter with its measured numbers and the portals it opens. Last comes the
+portal bento grid, whose network card carries a server-rendered sketch of the 15 districts.
+
+**Header.** It holds the nav (a menu below 1024 px), the colour presets and the ⌘K station search. The search reads
+`station-index.json` once, matches every word of the query and ranks word starts, then PageRank. It shows a station's
+docks, rank, district, archetype and its live state: from the gateway when it is up, from the recorded snapshot when
+not. It links to the station on the live map (`/live?station=<id>`).
 
 **Spark UI portal.** It is drawn from `spark-ui.json`, the history server's REST data:
 

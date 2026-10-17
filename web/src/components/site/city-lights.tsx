@@ -9,6 +9,15 @@ import { THEME_EVENT } from "./themes";
 type Point = [number, number, number]; // lon, lat, pagerank; stations arrive in PageRank order
 type Flow = [number, number, number]; // from index, to index, trips
 
+/** serving/hero-trips.json (HeroTripsJob): one real evening, one trip in `sampleEvery`. */
+type Replay = {
+  window: { date: string; from: string; until: string; sampleEvery: number };
+  totalTrips: number;
+  stations: [number, number][]; // lon, lat
+  trips: [number, number, number, number][]; // start station, end station, start second, duration
+  underWay: { minute: number; underWay: number }[];
+};
+
 /** Map annotations, not data: where each borough's name is written. */
 const PLACES: [string, number, number][] = [
   ["Manhattan", -73.9705, 40.7795],
@@ -19,16 +28,42 @@ const PLACES: [string, number, number][] = [
 ];
 const HUBS = 40;
 const TAIL = 4;
+/** The replay runs at 120× real time: three hours of an evening in 90 seconds. */
+const SPEED = 120;
+
+function isReplay(x: unknown): x is Replay {
+  const r = x as Replay;
+  return Array.isArray(r?.stations) && Array.isArray(r?.trips) && Array.isArray(r?.underWay) && !!r?.window;
+}
 
 /**
  * The home page's city of lights, north up: every station is a crisp dot sized by PageRank (the 40 biggest hubs
- * in the highlight colour), the summer's 500 busiest flows are faint arcs, and comets ride them, busier routes
- * carrying more. Everything static is drawn once into an offscreen layer; a frame only adds the comets, in a
- * handful of batched draw calls. The loop runs only while the map is on screen and no portal covers it.
- * Colours follow the active preset; reduced motion draws one still frame.
+ * in the highlight colour) and the summer's 500 busiest flows are faint arcs. Over them runs one real evening:
+ * each comet is a trip of `replay`, leaving its station at its real time, 120 times faster. A clock reads the
+ * evening's time and how many rides were under way then. Without the replay (offline, say) the comets ride the
+ * busiest flows instead.
+ *
+ * Everything static is drawn once into an offscreen layer; a frame only adds the comets, in a handful of batched
+ * draw calls. The loop runs only while the map is on screen and no portal covers it. Colours follow the active
+ * preset; reduced motion draws one still frame at the evening's busiest minute.
  */
-export function CityLights({ points, flows, className }: { points: Point[]; flows: Flow[]; className?: string }) {
+export function CityLights({
+  points,
+  flows,
+  replay: replayUrl,
+  label,
+  className,
+  clockClassName,
+}: {
+  points: Point[];
+  flows: Flow[];
+  replay?: string;
+  label: string;
+  className?: string;
+  clockClassName?: string;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const clock = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -52,6 +87,16 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
     let base: HTMLCanvasElement | null = null;
     let colors = { arc: "#7c5cff", station: "#14b8a6", hub: "#ffe066", label: "#9b95c9", font: "cursive" };
 
+    // The replay, once loaded: per trip its curve (a, control, b) in screen space, start and duration.
+    let replay: Replay | null = null;
+    let flowGeo = new Float32Array(0);
+    let geo = new Float32Array(0);
+    let starts = new Int32Array(0);
+    let lengths = new Int32Array(0);
+    let windowSeconds = 1;
+    let peakSecond = 0;
+    let shownMinute = -1;
+
     const readColors = () => {
       const css = getComputedStyle(document.documentElement);
       const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
@@ -62,6 +107,27 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
         label: v("--color-fg-2", colors.label),
         font: v("--font-caveat", colors.font),
       };
+    };
+
+    const bend = (a: [number, number], b: [number, number], k: number): [number, number] => {
+      const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+      return [(a[0] + b[0]) / 2 - dy * k, (a[1] + b[1]) / 2 + dx * k];
+    };
+
+    const layoutReplay = () => {
+      if (!replay) return;
+      const at = replay.stations.map(([lon, lat]) => project(lon, lat));
+      const n = replay.trips.length;
+      geo = new Float32Array(n * 6);
+      starts = new Int32Array(n);
+      lengths = new Int32Array(n);
+      replay.trips.forEach(([s, e, t, d], i) => {
+        const [a, b] = [at[s], at[e]];
+        const c = bend(a, b, 0.12);
+        geo.set([a[0], a[1], c[0], c[1], b[0], b[1]], i * 6);
+        starts[i] = t;
+        lengths[i] = d;
+      });
     };
 
     const layout = () => {
@@ -78,9 +144,11 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
       const screen = points.map(([lon, lat]) => project(lon, lat));
       curves = flows.map(([i, j, trips]) => {
         const [a, b] = [screen[i], screen[j]];
-        const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
-        return { a, b, c: [(a[0] + b[0]) / 2 - dy * 0.2, (a[1] + b[1]) / 2 + dx * 0.2], w: trips / maxTrips };
+        return { a, b, c: bend(a, b, 0.2), w: trips / maxTrips };
       });
+      flowGeo = new Float32Array(curves.length * 6);
+      curves.forEach((k, i) => flowGeo.set([k.a[0], k.a[1], k.c[0], k.c[1], k.b[0], k.b[1]], i * 6));
+      layoutReplay();
 
       base = document.createElement("canvas");
       base.width = canvas.width;
@@ -91,7 +159,7 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
       g.strokeStyle = colors.arc;
       g.lineCap = "round";
       for (const k of curves) {
-        g.globalAlpha = 0.07 + 0.3 * k.w;
+        g.globalAlpha = (replay ? 0.04 : 0.07) + (replay ? 0.18 : 0.3) * k.w;
         g.lineWidth = 0.5 + 1.5 * k.w;
         g.beginPath();
         g.moveTo(k.a[0], k.a[1]);
@@ -128,7 +196,7 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
       g.globalAlpha = 1;
     };
 
-    // One comet per route, two on the busiest fifth; each has its own phase and speed.
+    // Without a replay: one comet per route, two on the busiest fifth; each has its own phase and speed.
     const comets = flows.flatMap((f, i) =>
       Array.from({ length: f[2] / maxTrips > 0.45 ? 2 : 1 }, (_, k) => ({
         curve: i,
@@ -136,53 +204,122 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
         speed: 0.00005 + 0.00004 * ((i * 7) % 5) * 0.25,
       })),
     );
-    const at = (k: (typeof curves)[number], u: number): [number, number] => [
-      (1 - u) ** 2 * k.a[0] + 2 * (1 - u) * u * k.c[0] + u ** 2 * k.b[0],
-      (1 - u) ** 2 * k.a[1] + 2 * (1 - u) * u * k.c[1] + u ** 2 * k.b[1],
-    ];
+    // The comets of this frame: which curve (6 floats in `source`) and how far along it, in reused buffers, so
+    // a frame allocates nothing even with a thousand trips under way.
+    let index = new Int32Array(Math.max(comets.length, 1));
+    let along = new Float32Array(Math.max(comets.length, 1));
+    let count = 0;
+    let source = flowGeo;
+    const collect = (time: number) => {
+      count = 0;
+      if (!replay) {
+        source = flowGeo;
+        for (const m of comets) {
+          index[count] = m.curve;
+          along[count++] = (m.phase + time * m.speed) % 1;
+        }
+        return;
+      }
+      if (index.length < starts.length) {
+        index = new Int32Array(starts.length);
+        along = new Float32Array(starts.length);
+      }
+      source = geo;
+      const T = replaySecond(time);
+      for (let i = 0; i < starts.length; i++) {
+        const dt = T - starts[i];
+        if (dt < 0 || dt >= lengths[i]) continue;
+        index[count] = i;
+        along[count++] = dt / lengths[i];
+      }
+    };
+    // A point on comet k's quadratic curve at u.
+    const qx = (o: number, u: number) => (1 - u) ** 2 * source[o] + 2 * (1 - u) * u * source[o + 2] + u ** 2 * source[o + 4];
+    const qy = (o: number, u: number) =>
+      (1 - u) ** 2 * source[o + 1] + 2 * (1 - u) * u * source[o + 3] + u ** 2 * source[o + 5];
+
+    // Reduced motion shows the busiest minute; otherwise the loop starts an hour in, near the evening rush.
+    const replaySecond = (time: number) => (reduce ? peakSecond : (3600 + (time / 1000) * SPEED) % windowSeconds);
+
+    const tellTime = (time: number) => {
+      if (!replay || !clock.current) return;
+      const minute = Math.floor(replaySecond(time) / 60);
+      if (minute === shownMinute) return;
+      shownMinute = minute;
+      const [h, m] = replay.window.from.split(":").map(Number);
+      const total = h * 60 + m + minute;
+      const hhmm = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+      const under = replay.underWay[minute]?.underWay ?? 0;
+      const day = new Date(`${replay.window.date}T12:00:00Z`).toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        timeZone: "UTC",
+      });
+      // Two lines (the clock is `white-space: pre-line`), so it clears the station count on a narrow map.
+      clock.current.textContent = `${day} · ${hhmm}
+${under.toLocaleString("en-US")} rides under way`;
+    };
 
     const draw = (time: number) => {
       ctx.clearRect(0, 0, width, height);
       if (base) ctx.drawImage(base, 0, 0, width, height);
-      const heads = comets.map((m) => ({ k: curves[m.curve], u: (m.phase + time * m.speed) % 1 })).filter((h) => h.k);
+      collect(time);
+      const step = replay ? 0.035 : 0.012;
       ctx.strokeStyle = colors.hub;
       ctx.fillStyle = colors.hub;
       ctx.lineCap = "round";
-      // The tail: TAIL short segments, each one batched across all comets and fainter than the one before.
-      for (let s = 0; s < TAIL; s++) {
+      // The tail: short segments, each one batched across all comets and fainter than the one before. A thousand
+      // trips under way at once get one segment fewer and no halo, which keeps a frame inside the budget.
+      const tail = replay ? TAIL - 1 : TAIL;
+      for (let s = 0; s < tail; s++) {
         ctx.globalAlpha = 0.55 - s * 0.12;
         ctx.lineWidth = 1.8 - s * 0.35;
         ctx.beginPath();
-        for (const { k, u } of heads) {
-          const [from, to] = [u - s * 0.012, u - (s + 1) * 0.012];
+        for (let k = 0; k < count; k++) {
+          const o = index[k] * 6;
+          const from = along[k] - s * step;
+          const to = along[k] - (s + 1) * step;
           if (to < 0) continue;
-          const [p, q] = [at(k, from), at(k, to)];
-          ctx.moveTo(p[0], p[1]);
-          ctx.lineTo(q[0], q[1]);
+          ctx.moveTo(qx(o, from), qy(o, from));
+          ctx.lineTo(qx(o, to), qy(o, to));
         }
         ctx.stroke();
       }
-      for (const [radius, alpha] of [
-        [3.6, 0.22],
-        [1.6, 1],
-      ]) {
+      for (const [radius, alpha] of replay
+        ? [[1.4, 1]]
+        : [
+            [3.2, 0.2],
+            [1.4, 1],
+          ]) {
         ctx.globalAlpha = alpha;
         ctx.beginPath();
-        for (const { k, u } of heads) {
-          const [x, y] = at(k, u);
+        for (let k = 0; k < count; k++) {
+          const o = index[k] * 6;
+          const x = qx(o, along[k]);
+          const y = qy(o, along[k]);
           ctx.moveTo(x + radius, y);
           ctx.arc(x, y, radius, 0, Math.PI * 2);
         }
         ctx.fill();
       }
       ctx.globalAlpha = 1;
+      tellTime(time);
     };
 
     let frame = 0;
     let visible = false;
     let covered = false;
+    let live = true;
+    let requested = false;
+    // 30 frames a second: a comet crosses its ride in seconds, so every other display frame is enough, and the
+    // main thread keeps the rest for scrolling.
+    let drawn = 0;
     const loop = (time: number) => {
-      draw(time);
+      if (time - drawn >= 31) {
+        draw(time);
+        drawn = time;
+      }
       frame = requestAnimationFrame(loop);
     };
     const sync = () => {
@@ -199,19 +336,36 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
       draw(reduce ? 0 : performance.now());
     };
 
+    // The evening is fetched once the map is first on screen, so a visitor who never scrolls there pays nothing.
+    const loadReplay = () => {
+      if (!replayUrl || requested) return;
+      requested = true;
+      fetch(replayUrl)
+        .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
+        .then((json: { data?: unknown }) => {
+          if (!live || !isReplay(json.data)) return;
+          replay = json.data;
+          windowSeconds = Math.max(60, replay.underWay.length * 60);
+          const peak = replay.underWay.reduce((best, m) => (m.underWay > best.underWay ? m : best), replay.underWay[0]);
+          peakSecond = (peak?.minute ?? 0) * 60 + 30;
+          repaint();
+        })
+        .catch(() => {}); // the busiest-flow comets stay: the hero never depends on the replay
+    };
+
     // Preset colours cross-fade for about a second (registered CSS properties), so repaint once they have settled.
     let settle: ReturnType<typeof setTimeout> | undefined;
     const onTheme = () => {
       clearTimeout(settle);
       settle = setTimeout(repaint, 1300);
     };
-    let live = true;
     repaint();
     void document.fonts.ready.then(() => live && repaint()); // the borough names need the hand font
     const resize = new ResizeObserver(repaint);
     resize.observe(canvas);
     const seen = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
+      if (visible) loadReplay();
       sync();
     });
     seen.observe(canvas);
@@ -229,7 +383,12 @@ export function CityLights({ points, flows, className }: { points: Point[]; flow
       unwatch();
       window.removeEventListener(THEME_EVENT, onTheme);
     };
-  }, [points, flows]);
+  }, [points, flows, replayUrl]);
 
-  return <canvas ref={ref} aria-hidden className={className} />;
+  return (
+    <>
+      <canvas ref={ref} role="img" aria-label={label} className={className} />
+      {replayUrl && <p ref={clock} aria-hidden className={clockClassName} />}
+    </>
+  );
 }

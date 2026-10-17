@@ -55,7 +55,7 @@ function Stage({ s }: { s: StageView }) {
  */
 export function StageFlow({ shuffles }: { shuffles: { group: string; jobId: number; stages: StageView[] }[] }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       {shuffles.map((job) => {
         const mapSide = job.stages.filter((s) => s.shuffleWriteBytes > 0);
         const reduceSide = job.stages.filter((s) => s.shuffleWriteBytes === 0);
@@ -74,7 +74,7 @@ export function StageFlow({ shuffles }: { shuffles: { group: string; jobId: numb
                 <p className="text-center font-hand text-lg text-marker">one stage, nothing shuffled</p>
               </div>
             ) : (
-              <div className="my-auto grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)]">
+              <div className="my-auto grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)]">
                 <div className="space-y-3">
                   {mapSide.map((s) => (
                     <Stage key={s.stageId} s={s} />

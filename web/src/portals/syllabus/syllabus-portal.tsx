@@ -223,7 +223,7 @@ export async function SyllabusPortal() {
         </div>
         <div className="space-y-3">
           {rows.map((r) => (
-            <Glass key={`${r.unit}-${r.title}`} variant="inset" className="grid items-center gap-4 p-4 lg:grid-cols-[11rem_minmax(0,1fr)_12rem_13rem]">
+            <Glass key={`${r.unit}-${r.title}`} variant="inset" className="grid grid-cols-1 items-center gap-4 p-4 lg:grid-cols-[11rem_minmax(0,1fr)_12rem_13rem]">
               <div>
                 <Chip tone={r.tone}>{r.unit}</Chip>
                 <p className="mt-1.5 font-display text-base leading-tight font-bold text-fg">{r.title}</p>
@@ -247,7 +247,7 @@ export async function SyllabusPortal() {
         title="The five practicals"
         lede="The practical list of the course, each where it runs in VeloGraph and where to see it."
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {practicals.map((p, i) => (
             <Glass key={p.title} variant="inset" className="flex flex-col gap-3 p-4 text-center">
               <div className="flex justify-center">
@@ -291,7 +291,7 @@ export async function SyllabusPortal() {
               </ul>
             </Glass>
           </WithNote>
-          <div className="grid items-start gap-5 xl:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
             {scala.map((s) => (
               <CodePanel key={s.id} id={s.id} caption={s.concept} kicker="In our Scala" />
             ))}

@@ -152,7 +152,7 @@ export function NetworkExplorer({ communities }: { communities: Community[] }) {
         )}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Glass variant="inset" className="relative h-[34rem] overflow-hidden">
           {nodes.state === "error" || flows.state === "error" || paths.state === "error" ? (
             <MapMessage tone="error" text="the network exports could not be loaded" />

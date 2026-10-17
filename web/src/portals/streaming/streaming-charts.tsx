@@ -50,7 +50,7 @@ export function BatchCharts({ batches, limitS }: { batches: ProgressEntry[]; lim
   const latencies = withRows.map((b) => b.scoring!.latencyS).sort((a, b) => a - b);
   const p95 = latencies.length ? latencies[Math.min(latencies.length - 1, Math.floor(0.95 * latencies.length))] : 0;
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <ChartCard
         title="Rows per micro-batch"
         subtitle="Changed stations since the last trigger; an empty batch still rescores, since the hour moves on"

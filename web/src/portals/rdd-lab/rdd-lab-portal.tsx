@@ -14,13 +14,15 @@ type LineageStep = { rdd: string; op: string; partitions?: string; source?: stri
 function parseLineage(lines: string[]): LineageStep[] {
   const steps: LineageStep[] = [];
   lines.forEach((line, i) => {
-    const rdd = line.match(/(\w+RDD\[\d+\]) at (\w+)/);
-    if (rdd) {
+    // The RDD's name and id, then the operation that made it. `\w+RDD` would backtrack (RDD is word characters
+    // too), so the whole name is matched and its suffix checked.
+    const rdd = line.match(/(\w+)\[(\d+)\] at (\w+)/);
+    if (rdd?.[1].endsWith("RDD")) {
       const source = line.match(/(data\/raw\/[^ ]+)/)?.[1]; // keep the repo-relative part of local paths only
       const name = line.match(/(trips \d+ \([A-Z_]+\))/)?.[1];
       steps.push({
-        rdd: rdd[1],
-        op: rdd[2],
+        rdd: `${rdd[1]}[${rdd[2]}]`,
+        op: rdd[3],
         partitions: line.match(/\((\d+)\)/)?.[1],
         source: source ?? name,
         afterShuffle: i === 0,
@@ -82,8 +84,8 @@ export async function RddLabPortal() {
         title="The shuffle duel"
         lede={`Departures per station on ${int(r.trips)} parsed September trips, computed twice. Same answer, very different network traffic.`}
       >
-        <div className="grid items-center gap-6 lg:grid-cols-2">
-          <Glass className="grid gap-2 p-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 items-center gap-6 lg:grid-cols-2">
+          <Glass className="grid grid-cols-1 gap-2 p-6 sm:grid-cols-2">
             <ShuffleSketch crossing={18} label="groupByKey: every (station, 1) record travels" />
             <ShuffleSketch crossing={3} label="reduceByKey: only subtotals travel" />
           </Glass>
@@ -139,7 +141,7 @@ export async function RddLabPortal() {
         title="The accumulator trap"
         lede="Shared variable #1. Counting lines with an accumulator inside an action is exact; inside a transformation, every recomputation counts again."
       >
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <Glass className="p-6">
             <p className="font-hand text-xl text-mint">inside foreach (an action)</p>
             <p className="mt-1 text-5xl font-semibold text-fg">{int(r.accumulators.inAction)}</p>
@@ -185,7 +187,8 @@ export async function RddLabPortal() {
               <li key={s.rdd} className="flex items-center gap-2 md:flex-1">
                 {s.afterShuffle && (
                   <span className="mx-1 flex flex-col items-center font-hand text-lg leading-tight text-coral">
-                    <span aria-hidden>║</span>shuffle
+                    <span aria-hidden>║</span>
+                    <span>shuffle</span>
                     <span className="text-sm text-fg-3">new stage</span>
                   </span>
                 )}
@@ -215,7 +218,7 @@ export async function RddLabPortal() {
         title="RDD → DataFrame, three ways"
         lede="The same trips become a DataFrame by reflection on a case class, with an explicit schema, and from tuples; Spark SQL on the result agrees with the RDD count of member trips."
       >
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           {[
             ["reflection", "rdd.toDF() on case classes"],
             ["explicitSchema", "createDataFrame(rowRdd, schema)"],

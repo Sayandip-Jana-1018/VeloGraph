@@ -47,7 +47,7 @@ export type SnippetId = keyof typeof snippets;
 async function highlight(code: string, lang: string): Promise<string> {
   "use cache";
   cacheLife("max");
-  return codeToHtml(code, { lang, theme: "tokyo-night" });
+  return await codeToHtml(code, { lang, theme: "tokyo-night" });
 }
 
 /** "How Spark did it": a real excerpt of the Scala or PySpark code, extracted at sync time, highlighted on the server. */
@@ -69,7 +69,7 @@ export async function CodePanel({
           <span className="mr-2 font-hand text-lg font-normal text-marker">{kicker}</span>
           {caption}
         </p>
-        <p className="font-mono text-xs text-fg-3">
+        <p className="min-w-0 font-mono text-xs break-all text-fg-3">
           {snippet.file.replace("spark/src/main/scala/", "")}:{snippet.startLine}–{snippet.endLine}
         </p>
       </div>
@@ -98,10 +98,20 @@ export function Ledger({ rows }: { rows: { label: string; value: string; path: s
         Numbers ledger <span className="ml-2 font-sans text-xs font-normal text-fg-3">every figure above, and where it comes from</span>
       </p>
       <table className="w-full text-left text-sm">
+        <thead className="sr-only">
+          <tr>
+            <th scope="col">Figure</th>
+            <th scope="col">Value</th>
+            <th scope="col">Read from</th>
+          </tr>
+        </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.path} className="border-b border-white/5 last:border-0">
-              <td className="px-5 py-2 text-fg-2">{r.label}</td>
+            // Two figures can come from one field (a pair of numbers), so the label is part of the key.
+            <tr key={`${r.label} ${r.path}`} className="border-b border-white/5 last:border-0">
+              <th scope="row" className="px-5 py-2 font-normal text-fg-2">
+                {r.label}
+              </th>
               <td className="px-5 py-2 text-right font-semibold text-fg tabular-nums">{r.value}</td>
               <td className="hidden px-5 py-2 font-mono text-xs text-fg-3 md:table-cell">{r.path}</td>
             </tr>
@@ -115,7 +125,7 @@ export function Ledger({ rows }: { rows: { label: string; value: string; path: s
 /** A two-column band: evidence on the left, the sticky note (or any aside) on the right. */
 export function WithNote({ children, note }: { children: React.ReactNode; note: React.ReactNode }) {
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="min-w-0">{children}</div>
       <div className="lg:pt-6">{note}</div>
     </div>
