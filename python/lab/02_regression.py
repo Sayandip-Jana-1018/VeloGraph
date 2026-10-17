@@ -151,7 +151,7 @@ for algo, grid in GRID.items():
         tuning[algo].append({"params": params, "validation": m})
         print(f"{algo:>18} {params}: validation MAE {m['mae']:.4f} · R² {m['r2']:.4f}")
 chosen = {algo: min(runs, key=lambda r: r["validation"]["mae"])["params"] for algo, runs in tuning.items()}
-chosen
+print(chosen)
 
 # %% [markdown]
 # ## 4. The leaderboard

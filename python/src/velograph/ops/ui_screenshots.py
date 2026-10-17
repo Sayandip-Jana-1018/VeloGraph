@@ -13,10 +13,12 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import re
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import quote
 
 import typer
 from playwright.sync_api import Page, sync_playwright
@@ -35,6 +37,9 @@ class Shot:
     wait_for: str | None = None
 
 
+_APP_ID = re.compile(r"(app|local)-[\w-]+")
+
+
 class HistoryApi:
     def __init__(self, base: str) -> None:
         self.base = base.rstrip("/")
@@ -47,7 +52,11 @@ class HistoryApi:
         apps = [a for a in self.get("/applications") if a["name"] == name]
         if not apps:
             raise typer.BadParameter(f"no application named {name!r} in the history server")
-        return max(apps, key=lambda a: a["attempts"][0]["endTimeEpoch"])["id"]
+        app = str(max(apps, key=lambda a: a["attempts"][0]["endTimeEpoch"])["id"])
+        # The id goes into further API paths: accept only Spark's own format, URL-encoded.
+        if not _APP_ID.fullmatch(app):
+            raise ValueError("the history server returned an unexpected application id")
+        return quote(app, safe="")
 
     def job_for_group(self, app: str, group: str) -> dict[str, Any]:
         jobs = [j for j in self.get(f"/applications/{app}/jobs") if j.get("jobGroup") == group]
