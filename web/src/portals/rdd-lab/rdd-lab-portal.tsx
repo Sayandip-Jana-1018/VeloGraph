@@ -14,15 +14,16 @@ type LineageStep = { rdd: string; op: string; partitions?: string; source?: stri
 function parseLineage(lines: string[]): LineageStep[] {
   const steps: LineageStep[] = [];
   lines.forEach((line, i) => {
-    // The RDD's name and id, then the operation that made it. `\w+RDD` would backtrack (RDD is word characters
-    // too), so the whole name is matched and its suffix checked.
-    const rdd = line.match(/(\w+)\[(\d+)\] at (\w+)/);
-    if (rdd?.[1].endsWith("RDD")) {
+    // "MapPartitionsRDD[24] at map at ...": the RDD (name and id) is one token, the operation two tokens later.
+    const tokens = line.trim().split(" ");
+    const at = tokens.findIndex((t) => t.includes("RDD[") && t.endsWith("]"));
+    const rdd = at >= 0 && tokens[at + 1] === "at" ? { name: tokens[at], op: tokens[at + 2] } : null;
+    if (rdd) {
       const source = line.match(/(data\/raw\/[^ ]+)/)?.[1]; // keep the repo-relative part of local paths only
       const name = line.match(/(trips \d+ \([A-Z_]+\))/)?.[1];
       steps.push({
-        rdd: `${rdd[1]}[${rdd[2]}]`,
-        op: rdd[3],
+        rdd: rdd.name,
+        op: rdd.op,
         partitions: line.match(/\((\d+)\)/)?.[1],
         source: source ?? name,
         afterShuffle: i === 0,

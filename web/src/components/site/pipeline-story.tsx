@@ -113,7 +113,7 @@ export function PipelineStory({ stops }: { stops: Stop[] }) {
 function Chapter({ stop: s, n }: { stop: Stop; n: number }) {
   const portals = s.portals.map((id) => portalById(id)!);
   const units = [...new Set(portals.flatMap((p) => p.units))];
-  const outcomes = [...new Set(portals.flatMap((p) => p.outcomes))].sort();
+  const outcomes = [...new Set(portals.flatMap((p) => p.outcomes))].sort((a, b) => a.localeCompare(b));
   return (
     // Jumping to a stop puts its chapter across the middle of the screen, where the line reads its position.
     <li id={`stop-${s.id}`} data-stop={n - 1} className="scroll-mt-[calc(50vh-7rem)]">
