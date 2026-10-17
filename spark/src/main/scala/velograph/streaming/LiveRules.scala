@@ -1,5 +1,7 @@
 package velograph.streaming
 
+import java.time.Duration
+
 import scala.collection.mutable
 
 /** The newest status of one station, as the producer published it. */
@@ -182,6 +184,15 @@ object LiveRules {
               !previous.get(p.stationId).map(family).contains(family(p.risk)) =>
           p -> previous.getOrElse(p.stationId, "UNKNOWN")
       }
+
+  /**
+   * Whether a restarted job may resume from the last snapshot's risks: only if that snapshot is younger than
+   * the bootstrap window. An older one belongs to another run, and comparing with it would raise every change
+   * since then as a fresh alert. The age counts both ways: a snapshot read across the host's slow clock can
+   * look a little younger than now.
+   */
+  def resumable(snapshotAge: Duration, windowMinutes: Int): Boolean =
+    snapshotAge.abs.compareTo(Duration.ofMinutes(windowMinutes.toLong)) < 0
 }
 
 /**
