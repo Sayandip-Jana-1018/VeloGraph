@@ -18,11 +18,11 @@ export function RegressionExplorer({ targets }: { targets: MlRegression["data"][
         <ClaySegmented label="Target" value={target} onChange={setTarget} options={names.map((n) => ({ value: n, label: n }))} />
       </div>
       <RegressionLeaderboard target={target} data={data} />
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <HourErrorChart target={target} data={data} />
         <CalibrationChart target={target} data={data} />
       </div>
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <ResidualChart target={target} data={data} />
         <ImportanceChart target={target} data={data} />
       </div>

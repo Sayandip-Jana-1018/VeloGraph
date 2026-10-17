@@ -14,7 +14,7 @@ export function ShotWall({ shots }: { shots: Shot[] }) {
   const [open, setOpen] = useState<Shot | null>(null);
   return (
     <>
-      <div className="grid gap-x-8 gap-y-12 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-8 gap-y-12 md:grid-cols-2">
         {shots.map((s, i) => (
           <figure key={s.file} className="relative" style={{ rotate: `${(i % 2 ? 1 : -1) * (0.6 + (i % 3) * 0.35)}deg` }}>
             <Tape className="-top-3 left-8 z-10" tilt={-8 + i * 3} />

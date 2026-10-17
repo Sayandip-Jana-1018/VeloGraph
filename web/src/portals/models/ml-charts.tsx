@@ -72,7 +72,7 @@ export function ArchetypeCurves({ archetypes }: { archetypes: Archetype[] }) {
           ]}
         />
       </div>
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {archetypes.map((a) => {
           const dep = day === "work" ? a.curves.workDep : a.curves.offDep;
           const arr = day === "work" ? a.curves.workArr : a.curves.offArr;

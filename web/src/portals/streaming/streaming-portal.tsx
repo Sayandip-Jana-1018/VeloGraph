@@ -9,6 +9,7 @@ import {
   getStreamProgress,
 } from "@/lib/data";
 import { fixed, int, pct } from "@/lib/format";
+import { quantile, scoringLatency } from "@/lib/stream-stats";
 
 import { LiveBoard } from "./live-board";
 import { StreamLoop } from "./stream-loop";
@@ -23,11 +24,6 @@ import {
 
 const GATE_S = 90;
 const STATUS_TOPIC = "velograph.gbfs.station-status.v1";
-
-function quantile(xs: number[], q: number) {
-  const s = [...xs].sort((a, b) => a - b);
-  return s.length ? s[Math.min(s.length - 1, Math.floor(q * s.length))] : 0;
-}
 
 function Funnel({ rows }: { rows: { label: string; value: number; note: string; tone: string }[] }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -54,11 +50,7 @@ export async function StreamingPortal() {
   const [{ data: snapshot }, { data: progress }, { data: producer }, { data: replay }, { data: drills }, { data: features }] =
     await Promise.all([getLiveSnapshot(), getStreamProgress(), getProducerStats(), getReplayAnalytics(), getDrills(), getLiveFeatures()]);
 
-  const scoring = progress.batches.filter((b) => b.query === "live-station-scoring");
-  const withRows = scoring.filter((b) => b.scoring && b.inputRows > 0);
-  const latencies = withRows.map((b) => b.scoring!.latencyS);
-  const p50 = quantile(latencies, 0.5);
-  const p95 = quantile(latencies, 0.95);
+  const { scoring, batches: timedBatches, p50, p95 } = scoringLatency(progress);
   const rows = scoring.reduce((s, b) => s + b.inputRows, 0);
   const processing = scoring.filter((b) => b.scoring).map((b) => b.scoring!.processingMs);
   const c = producer.counts;
@@ -105,7 +97,7 @@ export async function StreamingPortal() {
         lede={`Spark reads the topic as an unbounded table and works through it in micro-batches, one every 30 s, on the Docker cluster. Event time is the station's own report time. A 10-minute watermark bounds the state that dropDuplicatesWithinWatermark keeps.`}
       >
         <div className="flex flex-wrap justify-center gap-4">
-          <KpiPuck label="Broker → snapshot" value={`${fixed(p95, 1)} s`} note={`p95 over ${int(withRows.length)} batches with data; p50 ${fixed(p50, 1)} s`} />
+          <KpiPuck label="Broker → snapshot" value={`${fixed(p95, 1)} s`} note={`p95 over ${int(timedBatches)} batches with data; p50 ${fixed(p50, 1)} s`} />
           <KpiPuck label="Gate B" value={p95 < GATE_S ? "passed" : "missed"} note={`p95 under ${GATE_S} s`} />
           <KpiPuck label="Micro-batches" value={int(scoring.length)} note={`${int(rows)} rows in`} />
           <KpiPuck label="Scoring time" value={`${fixed(quantile(processing, 0.5) / 1000, 1)} s`} note="median, 2 cores, all stations" />
@@ -140,7 +132,7 @@ export async function StreamingPortal() {
             </VivaNote>
           }
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Glass variant="inset" className="p-4 text-sm text-fg-2">
               <p className="font-display text-sm font-bold text-fg">Live features (gold/live_stations)</p>
               <p className="mt-2">
@@ -175,7 +167,7 @@ export async function StreamingPortal() {
           <KpiPuck label="Still counted" value={int(late.accepted)} note="their window was still open" />
           <KpiPuck label="Dropped as late" value={int(late.droppedByWatermark)} note="Spark's own counter" />
         </div>
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <UpdateWindowsChart system={replay.system} />
           <AppendWindowsChart stations={replay.stations} />
         </div>

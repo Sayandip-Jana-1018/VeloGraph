@@ -110,7 +110,7 @@ export function InsightGallery({ insights }: { insights: InsightView[] }) {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
       <nav aria-label="SQL insights" className="flex max-h-[44rem] flex-col gap-2 overflow-y-auto pr-1">
         {insights.map((i, n) => (
           <button

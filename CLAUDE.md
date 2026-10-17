@@ -91,10 +91,12 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Spark UI screenshots | `cd python; uv run python -m velograph.ops.ui_screenshots` (history server up) → `docs/assets/spark-ui/` |
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
 | ✅ Spark UI export | `cd python; uv run python -m velograph.ops.spark_ui_export` (history server up) → `serving/spark-ui.json` |
-| ✅ Web data sync | `cd web; pnpm sync` (serving JSON, screenshots, MapLibre worker, code snippets → `public/`, `src/generated/`) |
+| ✅ Hero replay | `.\scripts\submit.ps1 hero-trips` (~15 s) → `serving/hero-trips.json` (the evening in `velograph.hero`) |
+| ✅ Web data sync | `cd web; pnpm sync` (serving JSON, screenshots, MapLibre worker, code snippets, the ⌘K station index → `public/`, `src/generated/`) |
 | ✅ Web dev server | `cd web; pnpm dev` → http://localhost:3000 (stale page after an edit: stop it, delete `web/.next/dev`, restart) |
 | ✅ Web checks | `cd web; pnpm typecheck` · `pnpm lint` · `pnpm build` |
 | ✅ Scroll benchmark | `cd python; uv run python -m velograph.ops.scroll_bench` (web server up; ADR 012 frame budget) |
+| ✅ Lighthouse | `cd web; pnpm build; pnpm start`, then `pnpm dlx lighthouse@13.5.0 http://localhost:3000/ --preset=desktop "--chrome-path=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"` (the first runs after a reboot are noisy: repeat them) |
 | Batch pipeline | `.\scripts\pipeline.ps1 -Mode dev -Stages bronze,silver,gold,sql,graph,ml` |
 | Live demo | `.\scripts\demo.ps1` |
 
@@ -102,7 +104,8 @@ Windows gotchas, learned the hard way:
 - Quote `-D` flags in PowerShell (`sbt '-Dsbt.color=false'`); unquoted, PowerShell splits them at the dot.
 - In Windows PowerShell 5.1, native stderr plus `$ErrorActionPreference='Stop'` aborts scripts on Spark's first
   log line; run native tools through `Invoke-Native` (see `scripts/submit.ps1`) and check `$LASTEXITCODE`.
-- In Git Bash, prefix `docker exec` with `MSYS_NO_PATHCONV=1`, or `/opt/...` becomes `C:/Program Files/Git/opt/...`.
+- In Git Bash, prefix `docker exec` (or any command given a `/path` argument, such as a URL path) with
+  `MSYS_NO_PATHCONV=1`, or `/opt/...` becomes `C:/Program Files/Git/opt/...`.
 - Host Spark UIs use port 4050+; 4040–4042 are published by the Docker master for cluster drivers.
 - `Set-Content -Encoding utf8` in PowerShell 5.1 writes a BOM, which the Scala REPL rejects as illegal characters;
   write files for tools with `[IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding $false))`.
@@ -197,7 +200,13 @@ push without approval.
   Broker → snapshot p95 37.5 s over a 32-minute run. The `/live` page and the `streaming` portal show it all (P6.5).
 - **P6.7 done 17 Oct:** the `cluster` and `syllabus` portals, at `/cluster` and `/syllabus` and in the nav. The
   site has 11 portals.
-- **Next task:** the rest of P6.4 (the home page's trip-replay hero and ⌘K search), P6.8 polish, then P7.
+- **P6 done 17 Oct, Gate C met** (evidence in ROADMAP; [ADR 015](docs/adr/015-home-replay-pipeline-story-station-search.md)):
+  - the home page replays one real evening on the city of lights and tells the pipeline as an 8-stop subway line;
+  - the ⌘K station search sits in every page's header;
+  - layouts are checked at 1280, 1024, 768 and 390 px, with a menu below 1024 px;
+  - reduced motion hydrates cleanly, and there are branded 404 and error pages;
+  - Lighthouse (desktop) scores performance 93–98 and accessibility 100 on the 10 pages without a WebGL map.
+- **Next task:** P7 (one-command flows, tests green, README and runbook, live backtest, evidence pack).
   - Docker runs Kafka and the Spark cluster.
   - The GBFS recorder keeps running. It records only while the laptop is awake, and the recordings have gaps where
     it slept; the offline demo needs one full evening.

@@ -62,11 +62,11 @@ export async function NetworkPortal() {
           </>
         }
       >
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <RankList title="Weighted (ours, Pregel)" rows={pr.topWeighted.slice(0, 10)} value={(v) => `${fixed(v * 100, 3)} %`} />
           <RankList title="Unweighted (GraphX built-in)" rows={pr.topUnweighted.slice(0, 10)} value={(v) => `${fixed(v * 100, 3)} %`} />
         </div>
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <Glass variant="inset" className="p-5 text-sm">
             <h3 className="mb-2 text-center font-display text-base font-bold text-fg">Rise with weights</h3>
             {pr.risers.map((m) => (
@@ -98,7 +98,7 @@ export async function NetworkPortal() {
         lede={`${share(office.morningShare)} of the ${net.shift.sample} stations where morning riders end up are in Midtown or Lower Manhattan; in the evening it is ${share(office.eveningShare)}.`}
       >
         <DistrictChart rows={net.shift.districts} sample={net.shift.sample} />
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <RankList title="Morning magnets" rows={net.shift.morningMagnets.slice(0, 8)} value={(v) => `+${fixed(v, 2)}`} />
           <RankList title="Evening magnets" rows={net.shift.eveningMagnets.slice(0, 8)} value={(v) => fixed(v, 2)} />
         </div>
@@ -147,7 +147,7 @@ export async function NetworkPortal() {
           <KpiPuck label="Triangles" value={int(tri.triangles)} note="of strong ties" />
           <KpiPuck label="Clustering" value={fixed(tri.averageClustering, 2)} note={`random graph: ${fixed(tri.randomGraphClustering, 3)}`} />
         </div>
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <RankList title="Where bikes pile up (net arrivals)" rows={net.strength.sinks.slice(0, 6)} value={(v) => `+${int(v)}`} />
           <RankList title="Where bikes run out (net departures)" rows={net.strength.sources.slice(0, 6)} value={(v) => int(v)} />
         </div>

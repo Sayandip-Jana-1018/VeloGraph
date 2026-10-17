@@ -2,9 +2,12 @@ import { delta, fixed, int, pct } from "@/lib/format";
 import type { Insight } from "@/lib/schemas";
 
 type Row = Insight["data"]["rows"][number];
-const num = (row: Row | undefined, key: string): number => Number(row?.[key] ?? NaN);
+const num = (row: Row | undefined, key: string): number => Number(row?.[key] ?? Number.NaN);
 const str = (row: Row | undefined, key: string): string => String(row?.[key] ?? "");
-const maxBy = (rows: Row[], key: string) => rows.reduce((a, b) => (num(b, key) > num(a, key) ? b : a));
+const maxBy = (rows: Row[], key: string): Row | undefined =>
+  rows.reduce<Row | undefined>((a, b) => (num(b, key) > num(a, key) ? b : a), rows[0]);
+const minBy = (rows: Row[], key: string): Row | undefined =>
+  rows.reduce<Row | undefined>((a, b) => (num(b, key) < num(a, key) ? b : a), rows[0]);
 
 /**
  * The one-line takeaway written on each insight, computed from that insight's own rows, so the note can never
@@ -27,7 +30,7 @@ const RULES: Record<string, (rows: Row[]) => string> = {
   "round-trip-stations": (rows) =>
     `At ${str(rows[0], "name")}, ${pct(num(rows[0], "round_trip_pct"), 1)} of rides end where they began: riding for fun.`,
   "rain-impact": (rows) => {
-    const worst = rows.reduce((a, b) => (num(b, "vs_dry_pct") < num(a, "vs_dry_pct") ? b : a));
+    const worst = minBy(rows, "vs_dry_pct");
     return `${str(worst, "rain")}: ${delta(num(worst, "vs_dry_pct"))} trips per hour compared with dry hours.`;
   },
   "temperature-bands": (rows) => {
@@ -37,7 +40,7 @@ const RULES: Record<string, (rows: Row[]) => string> = {
   "weekly-ebike-share": (rows) =>
     `E-bikes went from ${pct(num(rows[0], "ebike_pct"), 1)} to ${pct(num(rows.at(-1), "ebike_pct"), 1)} of weekly trips.`,
   "station-imbalance": (rows) => {
-    const drain = rows.reduce((a, b) => (num(b, "net_per_day") < num(a, "net_per_day") ? b : a));
+    const drain = minBy(rows, "net_per_day");
     const fill = maxBy(rows, "net_per_day");
     return `${str(drain, "name")} loses ${fixed(Math.abs(num(drain, "net_per_day")), 1)} bikes a day; ${str(fill, "name")} gains ${fixed(num(fill, "net_per_day"), 1)}.`;
   },

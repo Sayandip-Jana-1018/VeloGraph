@@ -111,7 +111,7 @@ function SparkPanel({ spark }: { spark: ClusterData["spark"] }) {
           {spark.url} · {spark.status}
         </span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {(spark.workers ?? []).map((w, i) => (
           <div key={w.id} className="clay rounded-2xl p-3.5">
             <p className="flex items-center justify-between text-sm font-semibold text-fg">
@@ -172,7 +172,7 @@ function KafkaPanel({ kafka }: { kafka: ClusterData["kafka"] }) {
         <p className="font-display text-base font-bold text-fg">Kafka · KRaft</p>
         <span className="font-mono text-[0.7rem] text-fg-3">cluster {kafka.clusterId}</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {(kafka.brokers ?? []).map((b) => (
           <div key={b.id} className="clay rounded-2xl p-3.5">
             <p className="flex items-center gap-2 text-sm font-semibold whitespace-nowrap text-fg">
@@ -256,7 +256,7 @@ function ContainerPanel({ docker }: { docker: ClusterData["containers"] }) {
           {fixed(used / 1024, 2)} of {fixed(vm / 1024, 1)} GB in use · capped per container (ADR 009)
         </span>
       </div>
-      <div className="mt-3 grid gap-x-6 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-4">
         {docker.containers.map((c) => (
           <Bar key={c.name} used={c.memUsedMb} total={c.memLimitMb} label={`${c.name}, MB`} />
         ))}
@@ -287,7 +287,7 @@ export function ClusterTopology({ initial, recordedAt }: { initial: ClusterData;
               : `Recorded ${new Date(recordedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`}
         </span>
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
         <SparkPanel spark={data.spark} />
         <KafkaPanel kafka={data.kafka} />
       </div>

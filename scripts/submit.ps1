@@ -40,6 +40,7 @@ $jobClasses = @{
     'live-features'   = 'velograph.ml.LiveFeaturesJob'
     'live-station-scoring' = 'velograph.streaming.LiveStationScoringJob'
     'trip-replay-analytics' = 'velograph.streaming.TripReplayAnalyticsJob'
+    'hero-trips'      = 'velograph.export.HeroTripsJob'
 }
 if (-not $jobClasses.ContainsKey($Job)) {
     throw "Unknown job '$Job'. Known jobs: $(($jobClasses.Keys | Sort-Object) -join ', ')"

@@ -27,7 +27,7 @@ export function PortalSkeleton() {
       <p className="font-hand text-2xl text-marker">opening the portal…</p>
       <div className="mt-5 h-14 w-2/3 animate-pulse rounded-2xl bg-white/8" />
       <div className="mt-4 h-4 w-1/2 animate-pulse rounded-full bg-white/6" />
-      <div className="mt-12 grid gap-4 md:grid-cols-3">
+      <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <div key={i} className="h-40 animate-pulse rounded-3xl bg-white/5" />
         ))}

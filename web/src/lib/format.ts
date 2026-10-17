@@ -45,5 +45,5 @@ export function stamp(iso: string): string {
 
 /** Escapes text placed into HTML strings (chart tooltips): station names contain "&". */
 export function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  return text.replace(/[&<>"']/g, (c) => `&#${c.codePointAt(0)};`);
 }

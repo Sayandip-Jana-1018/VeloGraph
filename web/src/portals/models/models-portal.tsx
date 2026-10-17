@@ -70,7 +70,7 @@ export async function ModelsPortal() {
         </div>
         <SilhouetteChart selection={arch.selection} k={arch.k} minShare={0.02} />
         <ArchetypeCurves archetypes={arch.archetypes} />
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <ArchetypeScatter data={arch} />
           <div className="space-y-4">
             {arch.archetypes.map((a) => (
@@ -102,7 +102,7 @@ export async function ModelsPortal() {
             </VivaNote>
           }
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {groups.map((g) => (
               <Glass key={g} variant="inset" className="p-4">
                 <p className="font-display text-sm font-bold text-fg">{GROUP_LABEL[g] ?? g}</p>
@@ -143,7 +143,7 @@ export async function ModelsPortal() {
         title="What moves with demand"
         lede={`A station-hour sees ${fixed(corr.dispersion.mean, 2)} departures on average, but ${pct(corr.dispersion.zeroShare * 100, 0)} of hours see none, and the variance is ${fixed(corr.dispersion.variance / corr.dispersion.mean, 0)}× the mean. The station's own recent history at that weekday and hour is the strongest signal (correlation heat map · Unit VI).`}
       >
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <TopCorrelations rows={corr.withDepartures} />
           <CorrelationHeatmap data={corr} />
         </div>
@@ -173,7 +173,7 @@ export async function ModelsPortal() {
         title="Will a station drain or fill?"
         lede={`Each hour is labelled draining, stable or filling against ${fixed(cls.tau, 3)} × capacity. ${pct(cls.balance.test.stable * 100, 0)} of hours are stable, so accuracy flatters; the models are chosen on macro-F1 and trained with class weights. The ${modelLabel(cls.champion).replace("Linear SVM", "linear SVM")} reaches a macro-F1 of ${fixed(clsChampion.test.macroF1, 3)} (confusion matrix · Unit VI).`}
       >
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
           <ClassificationLeaderboard leaderboard={cls.leaderboard} baselines={cls.baselines} champion={cls.champion} />
           <ConfusionMatrix metrics={clsChampion.test} names={classNames} title={`${modelLabel(cls.champion)}: September`} />
         </div>

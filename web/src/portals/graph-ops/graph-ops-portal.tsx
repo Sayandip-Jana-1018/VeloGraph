@@ -59,7 +59,7 @@ export async function GraphOpsPortal() {
           <KpiPuck label="Out-degree" value={int(Math.round(g.avgOutDegree))} note="destinations per station, on average" />
           <KpiPuck label="Strong ties" value={int(g.strongUndirectedEdges)} note="≥ 20 trips, top-10" />
         </div>
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <HistogramChart
             title="Out-degree distribution"
             subtitle="How many different stations riders leave each station for"
@@ -87,7 +87,7 @@ export async function GraphOpsPortal() {
           </>
         }
       >
-        <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[minmax(0,1fr)_auto]">
           <ReplicationChart runs={net.partitioning} />
           <GridDiagram side={side} />
         </div>
@@ -99,7 +99,7 @@ export async function GraphOpsPortal() {
         title="Thirteen operators, each checked"
         lede="Run once on the real graph by OperatorTour; every claim below is asserted in the job before it is written."
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {net.operators.map((o) => (
             <Glass key={o.operator} className="p-5 text-center">
               <p className="font-mono text-sm font-bold text-marker">.{o.operator}</p>

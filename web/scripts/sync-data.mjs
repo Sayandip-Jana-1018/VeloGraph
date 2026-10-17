@@ -81,6 +81,42 @@ copyTree(join(repo, "docs/assets/spark-ui"), join(web, "public/spark-ui"), /\.pn
 mkdirSync(join(web, "public/maplibre"), { recursive: true });
 cpSync(join(web, "node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs"), join(web, "public/maplibre/maplibre-gl-worker.mjs"));
 
+// The ⌘K station search reads a compact index, derived here from two exports, instead of the 1.7 MB network file:
+// [id, name, lat, lon, capacity, PageRank rank, district, archetype (-1 for none), trips out, trips in, AM/PM shift].
+{
+  const nodes = JSON.parse(readFileSync(join(repo, "data/serving/network-nodes.json"), "utf8"));
+  const arch = JSON.parse(readFileSync(join(repo, "data/serving/archetypes.json"), "utf8"));
+  const archetypeOf = new Map(arch.data.points.map((p) => [p.station, p.archetype]));
+  const round = (x, d) => Math.round(x * 10 ** d) / 10 ** d;
+  const index = {
+    meta: {
+      schema: "velograph.station-index",
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      job: "sync-data, from network-nodes.json and archetypes.json",
+      source: nodes.meta.source,
+      rows: nodes.data.length,
+    },
+    data: {
+      archetypes: arch.data.archetypes.map((a) => a.name),
+      stations: nodes.data.map((n) => [
+        n.id,
+        n.name,
+        round(n.lat, 5),
+        round(n.lon, 5),
+        n.capacity ?? 0,
+        n.pagerankRank,
+        n.community,
+        archetypeOf.get(n.id) ?? -1,
+        n.outStrength,
+        n.inStrength,
+        round(n.prShift, 3),
+      ]),
+    },
+  };
+  writeFileSync(join(web, "public/data/station-index.json"), JSON.stringify(index));
+}
+
 const snippets = Object.fromEntries(SNIPPETS.map((s) => [s.id, excerpt(s)]));
 mkdirSync(join(web, "src/generated"), { recursive: true });
 writeFileSync(join(web, "src/generated/snippets.json"), JSON.stringify(snippets, null, 2) + "\n");

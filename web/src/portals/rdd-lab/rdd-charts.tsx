@@ -118,7 +118,7 @@ export function PersistenceChart({ runs }: { runs: Persist[] }) {
 
 /** Trips per start hour from the RDD job (one series, line with the peak labelled). */
 export function HourlyChart({ hours }: { hours: { hour: number; trips: number }[] }) {
-  const peak = hours.reduce((a, b) => (b.trips > a.trips ? b : a));
+  const peak = hours.reduce((a, b) => (b.trips > a.trips ? b : a), hours[0]);
   return (
     <ChartCard
       title="Trips by start hour, September 2026"

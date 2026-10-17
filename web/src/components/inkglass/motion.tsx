@@ -8,7 +8,9 @@ import { compact, fixed, int } from "@/lib/format";
 
 /**
  * Fades and lifts its children into place the first time they scroll into view. Only opacity and transform
- * animate, so the browser runs it on the compositor (a blur filter here made every reveal repaint).
+ * animate, so the browser runs it on the compositor (a blur filter here made every reveal repaint). With reduced
+ * motion they appear without moving. The first render is the same either way: the server cannot know the
+ * preference, and a different initial style would not hydrate.
  */
 export function Reveal({
   children,
@@ -23,10 +25,10 @@ export function Reveal({
   return (
     <motion.div
       className={className}
-      initial={reduce ? false : { opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.12 }}
-      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={reduce ? { duration: 0 } : { duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
     </motion.div>
@@ -42,22 +44,26 @@ const FORMAT: Record<CountFormat, (n: number) => string> = {
   fixed3: (n) => fixed(n, 3),
 };
 
-/** Counts up to `to` once it is visible; the final value is the real one (and what screen readers get). */
+/**
+ * Counts up to `to` once it is visible (with reduced motion it shows `to` at once); the final value is the real one,
+ * and the one screen readers get.
+ */
 export function CountUp({ to, format = "int", prefix = "", suffix = "" }: { to: number; format?: CountFormat; prefix?: string; suffix?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.6 });
   const reduce = useReducedMotion();
-  const [shown, setShown] = useState(reduce ? to : 0);
+  const [shown, setShown] = useState(0);
 
   useEffect(() => {
-    if (!inView || reduce) return;
-    const controls = animate(0, to, { duration: 1.6, ease: [0.16, 1, 0.3, 1], onUpdate: setShown });
+    if (!inView) return;
+    const controls = animate(0, to, { duration: reduce ? 0 : 1.6, ease: [0.16, 1, 0.3, 1], onUpdate: setShown });
     return () => controls.stop();
   }, [inView, reduce, to]);
 
   const text = `${prefix}${FORMAT[format](to)}${suffix}`;
   return (
-    <span ref={ref} aria-label={text}>
+    <span ref={ref}>
+      <span className="sr-only">{text}</span>
       <span aria-hidden>
         {prefix}
         {FORMAT[format](shown)}
