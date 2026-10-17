@@ -12,6 +12,7 @@ import {
   getDqReport,
   getInsights,
   getJobReports,
+  getLiveSnapshot,
   getMlRegression,
   getNetworkSummary,
   getRddReport,
@@ -22,7 +23,7 @@ import { cn } from "@/lib/cn";
 import { PORTALS, UPCOMING, type PortalId } from "@/portals/registry";
 
 export default async function Home() {
-  const [dq, net, rdd, insights, jobs, city, ui, reg] = await Promise.all([
+  const [dq, net, rdd, insights, jobs, city, ui, reg, live] = await Promise.all([
     getDqReport(),
     getNetworkSummary(),
     getRddReport(),
@@ -31,6 +32,7 @@ export default async function Home() {
     getCityLights(),
     getSparkUi(),
     getMlRegression(),
+    getLiveSnapshot(),
   ]);
   const shuffle = Object.fromEntries(rdd.data.shuffle.map((s) => [s.operation, s.shuffleBytes]));
   const shuffleRatio = shuffle.groupByKey / shuffle.reduceByKey;
@@ -51,6 +53,7 @@ export default async function Home() {
     network: `Q = ${fixed(c.modularity, 3)} · ${c.communities} districts`,
     "graph-ops": `${fixed(twoD.replicationFactor, 1)} vs ${fixed(random.replicationFactor, 1)} copies`,
     models: `${fixed(reg.data.targets.departures.improvementVsNaive, 0)} % under seasonal naive`,
+    streaming: `${int(live.data.kpis.stations)} stations every 30 s`,
   };
   const facts = [
     `${int(dq.data.validRows)} clean trips`,
@@ -70,10 +73,11 @@ export default async function Home() {
     lake: "lg:col-span-4",
     "rdd-lab": "lg:col-span-4",
     sql: "lg:col-span-4",
-    "spark-ui": "lg:col-span-6",
-    models: "lg:col-span-6",
+    "spark-ui": "lg:col-span-4",
+    models: "lg:col-span-4",
+    streaming: "lg:col-span-4",
   };
-  const order: PortalId[] = ["network", "pregel", "graph-ops", "lake", "rdd-lab", "sql", "spark-ui", "models"];
+  const order: PortalId[] = ["network", "pregel", "graph-ops", "lake", "rdd-lab", "sql", "spark-ui", "models", "streaming"];
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 sm:px-8">

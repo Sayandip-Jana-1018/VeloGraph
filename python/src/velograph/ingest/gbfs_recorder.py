@@ -21,7 +21,6 @@ import gzip
 import json
 import logging
 import os
-import signal
 import sys
 import time
 from dataclasses import dataclass, field
@@ -37,6 +36,7 @@ import typer
 from velograph.common.http import http_client, retrying
 from velograph.common.logs import configure_logging
 from velograph.common.settings import data_paths
+from velograph.common.stopping import StopFlag
 from velograph.ingest.gbfs import GbfsClient, InventoryKey, select_changes
 
 NYC = ZoneInfo("America/New_York")
@@ -201,31 +201,6 @@ class Recorder:
         return response.json()
 
 
-class _StopFlag:
-    """Set by console signals (interactive runs) or by the sentinel file (windowless runs)."""
-
-    def __init__(self, sentinel: Path) -> None:
-        self._sentinel = sentinel
-        self._signalled = False
-        signal.signal(signal.SIGINT, self._handle)
-        if hasattr(signal, "SIGBREAK"):
-            signal.signal(signal.SIGBREAK, self._handle)
-        if hasattr(signal, "SIGTERM"):
-            signal.signal(signal.SIGTERM, self._handle)
-
-    def _handle(self, signum: int, _frame: object) -> None:
-        log.info("signal %s received, stopping after the current step", signum)
-        self._signalled = True
-
-    def __bool__(self) -> bool:
-        return self._signalled or self._sentinel.exists()
-
-    def sleep(self, seconds: float) -> None:
-        deadline = time.monotonic() + seconds
-        while not self and time.monotonic() < deadline:
-            time.sleep(min(1.0, max(deadline - time.monotonic(), 0)))
-
-
 def main(
     interval: Annotated[
         float, typer.Option(help="Seconds between station_status polls (feed ttl is 60).")
@@ -246,7 +221,7 @@ def main(
         raise typer.Exit(code=2) from exc
 
     stop_file.unlink(missing_ok=True)
-    stop = _StopFlag(stop_file)
+    stop = StopFlag(stop_file)
     pid_info = {
         "pid": os.getpid(),
         "startedAt": datetime.now(UTC).isoformat(timespec="seconds"),

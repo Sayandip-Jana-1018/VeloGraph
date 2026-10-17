@@ -206,11 +206,13 @@ data/
     bronze/     trips (partition ym) · weather_hourly
     silver/     trips (partition start_date) · trips_quarantine (partition reason) · stations · weather_hourly
     gold/       station_hour (partition date) · route_edges · station_archetypes · ml_features (partition date)
+                live_stations · live_profiles
     graph/      station_metrics · communities · flows_top · landmark_paths
   models/       <model>/ (Spark ML PipelineModel, written by TrainChampionJob; cards in serving/model-cards.json)
-  stream/       predictions (partition date) · trip_metrics
-  checkpoints/  <streaming job>/
-  serving/      *.json UI contracts · jobs/*.json · live/snapshot.json
+  stream/       predictions (partition source, date, batch)
+  checkpoints/  <streaming job>-<source>/<query>/ (offsets, commits, state)
+  serving/      *.json UI contracts · jobs/*.json · live/{snapshot,stream-progress,producer-stats,
+                replay-analytics,drills}.json
   spark-events/ event logs for the history server
 ```
 
@@ -269,14 +271,23 @@ member_share, ebike_share, is_self_loop`; 1,308,071 directed pairs. Peaks count 
 holiday) in the `velograph.gold.peaks` windows (07:00–09:59 and 16:00–18:59); `trips_weekend` counts Saturdays and
 Sundays.
 
-**gold.station_archetypes** — `station_id, window (profile-a | profile-b), trips, fitted, archetype, archetype_name,
-pca_x, pca_y`: each station's KMeans archetype in each profile window. The clusters are learned on profile-a and
-applied unchanged to profile-b ([ADR 013](adr/013-leakage-safe-graph-features-and-archetypes.md)).
+**gold.station_archetypes** — `station_id, window (profile-a | profile-b | profile-l), trips, fitted, archetype,
+archetype_name, pca_x, pca_y`: each station's KMeans archetype in each profile window. The clusters are learned on
+profile-a and applied unchanged to profile-b and to profile-l, the live window
+([ADR 013](adr/013-leakage-safe-graph-features-and-archetypes.md), [ADR 014](adr/014-live-scoring-state-risk-and-latency.md)).
 
 **gold.ml_features** — one row per station-hour of the fit (August) and test (September) splits, 3,486,672 rows:
 `station_id, ts_hour, split, is_validation`, the 31 features of §8.3, and the targets `departures, arrivals,
 net_flow, regime`, partitioned by `date`. Hour-of-week profiles (holidays excluded) are computed on the fly from
 each split's profile window, so there is no separate profile table.
+
+**gold.live_stations** and **gold.live_profiles** — the static features of live scoring, from profile-l
+(`LiveFeaturesJob`): one row per station (2,546: every trip or GBFS station) with capacity, position, archetype and
+the GraphX features of that window, community ids aligned to the fit window's; and the hour-of-week profile of
+every station, weekday and hour (411,672 rows). The scoring job broadcast-joins both onto every micro-batch.
+
+**stream/predictions** — every micro-batch's predictions, one Parquet file per batch under
+`source=<live|replay>/date=<day>/batch=<id>`: a replayed batch overwrites its own file, so the sink is idempotent.
 
 ## 6. Batch jobs
 
@@ -298,6 +309,7 @@ and out, Spark app id), which feeds the pipeline timeline and the report's bench
 | StationArchetypesJob | gold.station_hour → gold.station_archetypes, `archetypes.json` | array higher-order functions, KMeans with restarts, ClusteringEvaluator (silhouette), StandardScaler + PCA | U6, CO4 |
 | FeatureBuildJob | gold + silver trips + archetypes → gold.ml_features, `ml-features.json` | trailing-window profiles, GraphX features per window (GraphFeatures), community alignment, approxQuantile (τ), data-level leakage checks | U3, CO4, CO6 |
 | *ML Lab (PySpark notebooks)* | gold.ml_features → leaderboards, ablation, heat map | see §8 | U6, CO4 |
+| LiveFeaturesJob | gold + silver trips + archetypes + ml_features → gold.live_stations, gold.live_profiles, `live-features.json` | GraphX per window, community alignment, data-level leakage check for the live window | CO4, CO6 |
 | TrainChampionJob | gold.ml_features → `models/*`, `model-cards.json` | the lab's Pipeline rebuilt in Scala, typed params from config, PipelineModel persistence, parity check against the lab (±1 %) | CO4 |
 | ServingExportJob | lake → `serving/*.json` | small coalesced, schema-versioned writes | CO5 |
 
@@ -378,7 +390,7 @@ unit-tested on toy graphs (`GraphAlgorithmsSpec`) and end to end on a synthetic 
 | Fit | 1 – 31 Aug | training; 25–31 Aug doubles as the validation week for tuning |
 | Profile-B | 7 Jul – 31 Aug (8 weeks) | profiles for test rows |
 | Test | 1 – 30 Sep | final evaluation, never used for tuning |
-| Profile-L | trailing 8 weeks before go-live | live scoring |
+| Profile-L | 6 Aug – 30 Sep (8 weeks) | live scoring: the last eight weeks of published trips, since a month's trip file appears only after the month ends |
 
 Every profile window ends before the window it feeds. `MlConfig` refuses any other layout, and `FeatureBuildJob`
 checks it again on the data it reads. The graph and archetype features follow the same windows: GraphX is rerun on
@@ -439,7 +451,11 @@ Three nodes in KRaft combined mode (broker + controller), no ZooKeeper. `default
 | `velograph.alerts.v1` | station | 3 | 7 d, delete | LiveStationScoring → gateway (`velograph-gateway` group), CLI consumer demo |
 | `velograph.dlq.v1` | source | 1 | 7 d, delete | any producer or consumer, for poison messages |
 
-Messages are JSON with `schema` and `v` fields. Event time is the GBFS `last_reported` (epoch seconds).
+Messages are JSON with `schema` and `v` fields. Event time is the GBFS `last_reported` (epoch seconds). The
+station-status topic stamps records with the broker's append time (`message.timestamp.type = LogAppendTime`), which
+the scoring job measures latency against. The weather topic is compacted to the latest value per key: `nyc` for the
+live feed, `nyc-replay` for a replay, so one never overwrites the other. After a restart the bootstrap script runs a
+preferred-leader election, since the broker that comes back first otherwise leads every partition.
 Topic names use `.` between segments and `-` inside them, never `_`: Kafka metric names treat `.` and `_` alike,
 so mixing them can make two topics' metrics collide.
 
@@ -447,47 +463,69 @@ so mixing them can make two topics' metrics collide.
 
 | Pattern | Where | Notes |
 |---|---|---|
-| API polling → stream (pull-to-push) | gbfs_producer | honours `ttl`; exponential backoff on errors |
-| Change data capture | gbfs_producer | publishes only stations whose (last_reported, bikes, e-bikes, docks) changed |
-| Batch → stream replay | trip_replayer | event-time ordered, speed factor (default ×60), preserves inter-arrival gaps |
-| Record & replay | gbfs_recorder, `gbfs_producer --source recorded` | offline demo + live backtest |
-| Dead-letter queue | all | malformed payloads → DLQ with error and raw bytes |
+| API polling → stream (pull-to-push) | gbfs_producer `--source live` | polls when the feed is due (`last_updated + ttl`), on the feed server's clock |
+| Change data capture | gbfs_producer | publishes only stations whose inventory changed (bikes, e-bikes, disabled bikes and docks, docks, flags), plus a full snapshot every 30 publishes |
+| Batch → stream replay | trip_replayer | one evening of silver trips, event-time ordered, ×60, gaps kept; 2 % held back 5–50 min as late data |
+| Record & replay | gbfs_recorder, `gbfs_producer --source recorded` | a recorded day, rebuilt poll by poll and replayed `--speed` times faster, labelled `replay` |
+| Dead-letter queue | producers, scoring job | an unknown station or malformed record → DLQ with the reason and the raw text |
 
 Producer settings: `acks=all`, `enable.idempotence=true`, `compression.type=lz4`, `linger.ms=20`, delivery callbacks
-with metrics.
+with metrics. Each poll is flushed before the producer sleeps, so the measured ack latency is the brokers' (p50 47 ms,
+p95 63 ms). The laptop's clock can be off (it was 92 s slow): the producer estimates its offset from the feed's
+`Date` and `Age` headers and stamps `fetched_at` on the feed's clock. Stats go to `serving/live/producer-stats.json`
+every minute.
 
 ### 9.4 Structured Streaming jobs
 
-**LiveStationScoringJob** (Scala)
+**LiveStationScoringJob** (Scala, [ADR 014](adr/014-live-scoring-state-risk-and-latency.md))
 
-1. `readStream.format("kafka")` on station_status (`startingOffsets=latest`, `maxOffsetsPerTrigger` cap) → `from_json`
-   with an explicit schema.
-2. `event_time = timestamp_seconds(last_reported)`; `withWatermark("event_time", "10 minutes")`;
-   `dropDuplicatesWithinWatermark("station_id", "last_reported")`.
-3. `foreachBatch`, trigger 30 s:
-   - latest state per station within the batch;
-   - broadcast-join static features: stations ⨝ graph metrics ⨝ archetypes ⨝ profiles for the current and next
-     hour-of-week;
-   - latest weather from a batch read of the compacted weather topic;
-   - `PipelineModel.transform` → departures/arrivals for h₀ and h₀ + 1 → 60-min net flow, projected bikes, risk
-     (`EMPTY_RISK` if projected < max(2, 10 % of capacity), `FULL_RISK` if free docks would drop below the same
-     margin), regime;
-   - rebalancing: greedy deficit ↔ surplus matching inside each community, ≤ 2.5 km, ≤ 12 bikes per move (driver-side
-     on ≤ 2.5k rows — a deliberate, bounded collect);
-   - sinks: Kafka predictions (all) and alerts (risk ≠ OK and changed), Parquet `stream/predictions` (append), and an
-     atomic `serving/live/snapshot.json` (write temp, then rename).
-4. Checkpoint in `checkpoints/live-station-scoring`; a restart resumes from the stored offsets.
+1. `readStream.format("kafka")` on station-status (`startingOffsets=latest` on a first run, `maxOffsetsPerTrigger`
+   20,000, `failOnDataLoss=false`) → `from_json` with an explicit schema. Records that are not station messages go to
+   the DLQ through a second query.
+2. Only the chosen `--source` (live or replay); `event_time = timestamp_seconds(last_reported)`;
+   `withWatermark("event_time", "10 minutes")`; `dropDuplicatesWithinWatermark("station_id", "last_reported")`.
+3. `foreachBatch`, trigger 30 s, driver-side (`LiveScorer`):
+   - the newest status of every station, kept on the driver (≤ 2.5k rows) and rebuilt on start from the last
+     35 minutes of the topic;
+   - the current and next hour: calendar (silver.calendar) and weather (the compacted topic, read again at most once
+     a minute);
+   - broadcast-join of gold.live_stations and the two hour-of-week rows of gold.live_profiles → the 31 model columns
+     (`LiveTransforms.featureRows`), scored by the three PipelineModels;
+   - `LiveRules`: net flow over the next 60 minutes = (1 − f)·net̂(h₀) + f·net̂(h₀ + 1), projected bikes and docks,
+     and one of six states against a margin of max(2, 10 % of the docks): EMPTY / FULL now, EMPTY_RISK / FULL_RISK
+     within 60 minutes, OK, OFFLINE;
+   - alerts when a station enters the empty or the full family (not on the first batch);
+   - `Rebalancer`: one GraphX district at a time, neediest first by expected departures, donors in the same
+     district (full stations first, then nearest), ≤ 2.5 km, ≤ 12 bikes a move, ≤ 40 moves;
+   - sinks: Kafka predictions (every station) and alerts, Parquet `stream/predictions`, then
+     `serving/live/snapshot.json` (temp file, then rename).
+4. Checkpoint in `checkpoints/live-station-scoring-<source>`; a restart resumes from the stored offsets. A
+   `StreamingQueryListener` keeps `serving/live/stream-progress.json` (input rows, durations, watermark, state rows,
+   rows dropped as late, and the scorer's own latency per batch).
 
-**TripReplayAnalyticsJob** (Scala) — reads `trips.replay`; event time = `started_at`; 15-minute watermark; tumbling
-15-minute departures per station; sliding 60/15-minute system totals by member/casual and e-bike; a late-row counter
-via `observe()`; sinks to Kafka `trip-metrics` and the console. It demonstrates output modes (update vs append), the
-state store, late data and triggers.
+**TripReplayAnalyticsJob** (Scala) — reads trips.replay; event time = `started_at`; 15-minute watermark; trigger 10 s.
+Two queries on one stream:
+- **`replay-station-15m`:** departures per station in tumbling 15-minute windows, **append** mode. `foreachBatch`
+  writes each closed window to the trip-metrics topic.
+- **`replay-system-60m`:** system totals by member, casual and e-bike in sliding 60/15-minute windows, **update**
+  mode, printed to the console.
+
+`observe()` counts the rows and the late trips sent. The progress reports count the rows the watermark dropped. A
+late row is judged by its window: Spark drops it only once the watermark has passed the end of the window it falls
+in. Both go to `serving/live/replay-analytics.json`. Each streaming app takes `spark.cores.max = 2`, so the two jobs
+share the 4-core cluster.
 
 ### 9.5 Guarantees
 
 - Kafka → Spark: offsets live in the checkpoint, so processing is exactly-once with respect to state. The Kafka sink
   is at-least-once, so consumers dedupe by (station, event_time). The snapshot file is replaced atomically.
-- Losing one broker is tolerated: RF 3 with min ISR 2 and `acks=all`.
+- Losing one broker is tolerated: RF 3 with min ISR 2 and `acks=all`. Measured (`velograph.ops.drills broker`):
+  broker 2 stopped for 120 s mid-stream. Its 5 partition leaders moved to broker 3 within 7 s, every partition
+  ran on 2 in-sync replicas, none was left without a leader, and the producer had 352 deliveries and 0
+  failures. Four scoring batches ran meanwhile, and all partitions were fully in sync 5.4 s after the restart.
+- A killed driver resumes from its checkpoint (`velograph.ops.drills restart`): the drill compares Spark's offset
+  log before the `kill -9` and after the restart, and passes only if the first new batch starts where the last
+  committed one ended.
 
 ## 10. Serving layer & contracts
 
@@ -505,7 +543,12 @@ portals quote).
 | `archetypes.json` (k selection, centres as hourly curves, PCA points, stability), `ml-features.json` (windows, leakage checks, τ, class balance, feature dictionary) | StationArchetypesJob, FeatureBuildJob | `models` portal; the labs read the dictionary |
 | `ml-correlation.json` (Lab 01), `ml-regression.json` (Lab 02: grid, tuning, leaderboards, errors by hour and archetype, calibration, importances), `ml-classification.json` (Lab 03: baselines, leaderboard, confusion matrices), `ml-ablation.json` (Lab 04) | PySpark ML lab notebooks | `models` portal |
 | `model-cards.json` (algorithm, parameters, features, windows, Scala vs lab metric, training rows and time, Spark version, git SHA) | TrainChampionJob | `models` portal |
-| `live-replay/*.json` | recorder → exporter | Live (offline mode) |
+| `live-features.json` (window, leakage check, district alignment, archetype counts) | LiveFeaturesJob | `streaming` portal |
+| `live/snapshot.json` (every station's state, forecast and projection, KPIs, moves, recent alerts) | LiveStationScoringJob, every micro-batch | `/live`, `streaming` portal |
+| `live/stream-progress.json` (the last 120 micro-batches of both queries) | LiveStationScoringJob's listener | `streaming` portal |
+| `live/producer-stats.json` | gbfs_producer, every minute | `streaming` portal |
+| `live/replay-analytics.json` (windows in both output modes, late data) | TripReplayAnalyticsJob | `streaming` portal |
+| `live/drills.json` (broker and restart drills, sample by sample) | `velograph.ops.drills` | `streaming` portal |
 
 Every file uses one envelope:
 
@@ -526,8 +569,9 @@ Every file uses one envelope:
 |---|---|
 | `GET /api/health` | liveness + Kafka and Spark reachability |
 | `GET /api/live/snapshot` | latest `snapshot.json` |
-| `GET /api/live/stream` | SSE of predictions and alerts from Kafka (consumer group `velograph-gateway`) |
-| `GET /api/cluster` | Spark master `/json` (workers, cores, memory, apps) + Kafka AdminClient metadata (brokers, partitions, leaders, ISR) |
+| `GET /api/live/{progress,producer,replay}` | the other live exports |
+| `GET /api/live/stream` | SSE from Kafka (consumer group `velograph-gateway`): `hello`, one `batch` summary per micro-batch (counts by state), every `alert` |
+| `GET /api/cluster` | Spark master `/json` (workers, cores, memory, apps) + Kafka AdminClient metadata (brokers, controller, partitions, leaders, ISR) + the gateway group's lag |
 | `POST /api/sql` *(stretch)* | read-only Spark SQL on gold tables, LIMIT 500, 20 s timeout |
 
 ## 11. Web experience
@@ -538,7 +582,7 @@ motion, deck.gl 9 + MapLibre 6 via react-map-gl 8 (CARTO Dark Matter basemap, no
 | Route | Purpose | Signature moment |
 |---|---|---|
 | `/` | Story + headline KPIs | night-time animated trips over NYC (TripsLayer) |
-| `/live` | Operations | pulsing risk halos, alert ticker, suggested moves drawn as arcs |
+| `/live` | Operations (built) | every station by state (solid = now, pulsing ring = within 60 min), alert ticker over SSE, suggested moves as arcs, station drawer; the recorded snapshot when the gateway is down |
 | `/network` | GraphX | AM ↔ PM PageRank morph slider, communities, travel-time isochrones |
 | `/models` | MLlib | leaderboards vs baselines, confusion matrix, ablation, archetype profiles, heat map |
 | `/insights` | Spark SQL | insight cards with "View SQL" |
@@ -664,3 +708,4 @@ Open-Meteo.com (CC BY 4.0). Basemap © CARTO, © OpenStreetMap contributors.
 | [011](adr/011-inkglass-design-and-portals.md) | "Inkglass" design language; one evidence portal per module | the user wants every module shown in the UI, maximalist + neumorphic + glass + hand-drawn |
 | [012](adr/012-inkglass-presets-frame-budget-spark-ui.md) | Colour presets; glass without live blur under a frame budget; the Spark UI's charts redrawn from its REST API | design feedback (16 Oct): presets, real Spark dashboards, no scroll lag (frame cost 25–30 ms → 6–7.5 ms) |
 | [013](adr/013-leakage-safe-graph-features-and-archetypes.md) | Graph features recomputed per profile window; archetypes learned once and applied to both windows | the P3 graph includes the test month; cluster and district ids must mean the same in fit and test rows |
+| [014](adr/014-live-scoring-state-risk-and-latency.md) | Live scoring keeps station state on the driver, splits risk into now and forecast, plans moves one district at a time, and measures latency on the broker's clock | a micro-batch holds only changed stations; 37 % of stations are empty or full at any evening hour; the Windows clock was 92 s slow |

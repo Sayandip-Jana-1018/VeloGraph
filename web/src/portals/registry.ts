@@ -1,7 +1,17 @@
 import type { Accent } from "@/components/inkglass/paper";
 
 /** Evidence portals (ADR 011): one per module, each with its own URL `/portal/<id>`. */
-export const PORTAL_IDS = ["lake", "rdd-lab", "sql", "spark-ui", "pregel", "network", "graph-ops", "models"] as const;
+export const PORTAL_IDS = [
+  "lake",
+  "rdd-lab",
+  "sql",
+  "spark-ui",
+  "pregel",
+  "network",
+  "graph-ops",
+  "models",
+  "streaming",
+] as const;
 export type PortalId = (typeof PORTAL_IDS)[number];
 
 export type PortalMeta = {
@@ -96,12 +106,21 @@ export const PORTALS: PortalMeta[] = [
     accent: "coral",
     sources: ["archetypes.json", "ml-features.json", "ml-*.json", "model-cards.json"],
   },
+  {
+    id: "streaming",
+    title: "Streaming",
+    kicker: "Kafka in, Spark every 30 s",
+    hook: "The live feed through three Kafka brokers into Structured Streaming: micro-batches, watermarks, output modes, and a broker pulled mid-stream.",
+    units: ["Unit V"],
+    outcomes: ["CO4", "CO5"],
+    accent: "teal",
+    sources: ["live/snapshot.json", "live/stream-progress.json", "live/replay-analytics.json", "live/drills.json"],
+  },
 ];
 
 /** Portals planned for the next phases, shown as sketches so the whole syllabus is visible from day one. */
 export const UPCOMING = [
-  { title: "Streaming", note: "Kafka, Structured Streaming, broker failover", phase: "P5" },
-  { title: "Cluster", note: "Spark master, workers, brokers, job timeline", phase: "P5" },
+  { title: "Cluster", note: "Spark master, workers, brokers, job timeline", phase: "P6" },
   { title: "Syllabus", note: "Every unit and CO, one click from its evidence", phase: "P6" },
 ];
 

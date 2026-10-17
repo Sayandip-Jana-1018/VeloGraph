@@ -32,10 +32,15 @@ const SNIPPETS = [
   { id: "graphops-group-edges", file: `${scala}/graph/OperatorTour.scala`, start: "// groupEdges: split", end: /groupEdges\(_ \+ _\)/ },
   { id: "graphops-partitioning", file: `${scala}/graph/GraphStructure.scala`, start: "def partitioning[", end: /partitioned\.unpersist/ },
   { id: "ml-kmeans-selection", file: `${scala}/ml/StationArchetypesJob.scala`, start: "val candidates = (c.kMin to c.kMax)", end: /val \(k, silhouette, _, model\)/ },
-  { id: "ml-leakage-check", file: `${scala}/ml/FeatureBuildJob.scala`, start: "val lastProfileDay", end: /require\(check\.passed/ },
+  { id: "ml-leakage-check", file: `${scala}/ml/FeatureBuildJob.scala`, start: "val lastProfileDay", end: /^      \)$/ },
   { id: "ml-champion-parity", file: `${scala}/ml/TrainChampionJob.scala`, start: "val lab   = labMetric", end: /^      \)$/ },
   { id: "ml-lab-pipeline", file: "python/lab/02_regression.py", start: "def pipeline(algo, params, target", end: /return Pipeline/ },
   { id: "ml-class-weights", file: "python/lab/03_classification.py", start: "def weighted(df):", end: /return df\.withColumn/ },
+  { id: "stream-producer-cdc", file: "python/src/velograph/ingest/gbfs_producer.py", start: "def publish_status(", end: /return kind, sent/ },
+  { id: "stream-watermark", file: `${scala}/streaming/LiveStationScoringJob.scala`, start: "val score: (DataFrame, Long) => Unit", end: /\.start\(\)/ },
+  { id: "stream-risk", file: `${scala}/streaming/LiveRules.scala`, start: "(1 - fraction) * d0", end: /else Ok/ },
+  { id: "stream-rebalance", file: `${scala}/streaming/LiveRules.scala`, start: "def plan(stations", end: /moves\.take\(rule\.maxMoves\)/ },
+  { id: "stream-replay-windows", file: `${scala}/streaming/TripReplayAnalyticsJob.scala`, start: "def perStation(", end: /^      \)$/ },
 ];
 
 function copyTree(from, to, keep) {

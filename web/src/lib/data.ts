@@ -172,3 +172,40 @@ export async function getCityLights() {
       }),
   };
 }
+
+// ---- P5: the live path as the last run left it; the live page refreshes it from the gateway ------------------
+export async function getLiveSnapshot() {
+  "use cache";
+  cacheLife("max");
+  return load("live/snapshot.json", S.LiveSnapshot);
+}
+
+export async function getStreamProgress() {
+  "use cache";
+  cacheLife("max");
+  return load("live/stream-progress.json", S.StreamProgress);
+}
+
+export async function getProducerStats() {
+  "use cache";
+  cacheLife("max");
+  return load("live/producer-stats.json", S.ProducerStats);
+}
+
+export async function getReplayAnalytics() {
+  "use cache";
+  cacheLife("max");
+  return load("live/replay-analytics.json", S.ReplayAnalytics);
+}
+
+export async function getDrills() {
+  "use cache";
+  cacheLife("max");
+  return load("live/drills.json", S.Drills);
+}
+
+export async function getLiveFeatures() {
+  "use cache";
+  cacheLife("max");
+  return load("live-features.json", S.LiveFeatures);
+}

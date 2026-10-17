@@ -171,6 +171,44 @@ object LakeSchemas {
     "date"            -> DateType
   )
 
+  /**
+   * `gold/live_stations` (P5.3): the static features of live scoring, one row per station, from profile-l
+   * (the last eight weeks of trips). Community ids follow the fit window's numbering, which the models
+   * learned.
+   */
+  val GoldLiveStation: StructType = fields(
+    "station_id"      -> StringType,
+    "name"            -> StringType,
+    "lat"             -> DoubleType,
+    "lon"             -> DoubleType,
+    "capacity"        -> IntegerType,
+    "capacity_known"  -> BooleanType,
+    "archetype"       -> IntegerType,
+    "archetype_name"  -> StringType,
+    "pagerank_w"      -> DoubleType,
+    "pr_am"           -> DoubleType,
+    "pr_pm"           -> DoubleType,
+    "pr_shift"        -> DoubleType,
+    "in_strength"     -> LongType,
+    "out_strength"    -> LongType,
+    "imbalance_ratio" -> DoubleType,
+    "clustering_coef" -> DoubleType,
+    "community"       -> IntegerType
+  )
+
+  /**
+   * `gold/live_profiles` (P5.3): hour-of-week profiles over profile-l, one row per station, weekday and hour.
+   */
+  val GoldLiveProfile: StructType = fields(
+    "station_id"    -> StringType,
+    "dow"           -> IntegerType,
+    "hour"          -> IntegerType,
+    "prof_dep_mean" -> DoubleType,
+    "prof_arr_mean" -> DoubleType,
+    "prof_dep_std"  -> DoubleType,
+    "prof_arr_std"  -> DoubleType
+  )
+
   /** `gold/route_edges`: one row per directed station pair with at least one trip. */
   val GoldRouteEdge: StructType = fields(
     "src_id"            -> StringType,

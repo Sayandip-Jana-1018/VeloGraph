@@ -6,6 +6,9 @@ already moved them once (``gbfs.citibikenyc.com`` now points at ``gbfs.lyft.com`
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -13,6 +16,45 @@ import httpx
 from velograph.common.http import retrying
 
 DISCOVERY_URL = "https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json"
+
+_ONE_DECIMAL = re.compile(r"^\d+\.\d$")
+
+
+def normalize_station_id(short_name: str) -> str:
+    """The lake's station id for a GBFS ``short_name``: ``5980.1`` -> ``5980.10``.
+
+    Mirrors ``velograph.etl.StationIds`` in Scala. Ids carry two decimals, but a few GBFS entries (and about
+    1 % of trip records) drop the trailing zero; without the fix the live feed would miss those stations'
+    features.
+    """
+    return short_name + "0" if _ONE_DECIMAL.match(short_name) else short_name
+
+
+@dataclass(frozen=True)
+class StationInfo:
+    station_id: str  # the lake's id (normalized short_name), the Kafka key
+    name: str
+    lat: float
+    lon: float
+    capacity: int
+
+
+def station_registry(information: dict[str, Any]) -> dict[str, StationInfo]:
+    """GBFS station UUID -> the station as the lake knows it, from a ``station_information`` payload."""
+    registry: dict[str, StationInfo] = {}
+    for s in information["data"]["stations"]:
+        short_name = s.get("short_name")
+        if not short_name:
+            continue  # without a short_name a station cannot be joined to its trips or features
+        registry[s["station_id"]] = StationInfo(
+            station_id=normalize_station_id(str(short_name)),
+            name=str(s.get("name", "")),
+            lat=float(s["lat"]),
+            lon=float(s["lon"]),
+            capacity=int(s.get("capacity") or 0),
+        )
+    return registry
+
 
 # Fields that describe a station's inventory. A station counts as "changed" only when one of these moves;
 # `last_reported` alone ticks over constantly and would turn every delta into a full snapshot.
@@ -66,11 +108,28 @@ class GbfsClient:
         except KeyError:
             raise KeyError(f"GBFS feed {name!r} not listed; available: {sorted(self._feeds)}") from None
 
-    @retrying()
     def fetch(self, name: str) -> dict[str, Any]:
+        return self._get(name).json()
+
+    def fetch_with_clock(self, name: str) -> tuple[dict[str, Any], float | None]:
+        """The feed, and the server's clock when it answered, in epoch seconds.
+
+        The feed sits behind a CDN: a cached copy keeps the origin's ``Date`` and says in ``Age`` how many
+        seconds it has been cached, so the time now is their sum.
+        """
+        response = self._get(name)
+        date = response.headers.get("date")
+        if not date:
+            return response.json(), None
+        age = response.headers.get("age", "0")
+        server = parsedate_to_datetime(date).timestamp() + (int(age) if age.isdigit() else 0)
+        return response.json(), server
+
+    @retrying()
+    def _get(self, name: str) -> httpx.Response:
         response = self._http.get(self.feed_url(name))
         response.raise_for_status()
-        return response.json()
+        return response
 
     @retrying()
     def _discover(self) -> dict[str, str]:

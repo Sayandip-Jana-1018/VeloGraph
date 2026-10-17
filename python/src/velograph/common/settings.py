@@ -39,6 +39,11 @@ class DataPaths:
         return self.root / "serving"
 
     @property
+    def checkpoints(self) -> Path:
+        """Structured Streaming checkpoints: one folder per streaming job and source."""
+        return self.root / "checkpoints"
+
+    @property
     def logs(self) -> Path:
         return self.root / "logs"
 

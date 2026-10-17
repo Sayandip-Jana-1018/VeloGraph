@@ -50,11 +50,15 @@ final case class ArchetypeConfig(
   require(restarts >= 1, s"restarts must be at least 1, got $restarts")
 }
 
-/** `velograph.ml` in application.conf. */
+/**
+ * `velograph.ml` in application.conf. `live` is the live period, whose features come from profile-l, the last
+ * eight weeks of trips (ARCHITECTURE §8.2).
+ */
 final case class MlConfig(
     seed: Long,
     fit: FeatureWindow,
     test: FeatureWindow,
+    live: FeatureWindow,
     validation: DateWindow,
     archetypes: ArchetypeConfig,
     regimeQuantile: Double
@@ -84,6 +88,7 @@ object MlConfig {
       seed = c.getLong("seed"),
       fit = FeatureWindow("fit", window("fit"), window("profile-a")),
       test = FeatureWindow("test", window("test"), window("profile-b")),
+      live = FeatureWindow("live", window("live"), window("profile-l")),
       validation = window("validation"),
       archetypes = ArchetypeConfig(
         a.getInt("k-min"),
