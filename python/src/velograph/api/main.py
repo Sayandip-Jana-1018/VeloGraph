@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
-from velograph.api.cluster import kafka_cluster, spark_master
+from velograph.api.cluster import containers, kafka_cluster, spark_master
 from velograph.api.live import Broadcaster, LiveConsumer
 from velograph.common.kafka import bootstrap_servers, now_iso
 from velograph.common.settings import data_paths
@@ -142,10 +142,20 @@ def create_app(*, live_dir: Path | None = None, start_consumer: bool = True) -> 
 
     @app.get("/api/cluster")
     async def cluster() -> dict[str, Any]:
-        kafka, spark = await asyncio.gather(
-            asyncio.to_thread(kafka_cluster, admin), asyncio.to_thread(spark_master, http)
+        kafka, spark, docker = await asyncio.gather(
+            asyncio.to_thread(kafka_cluster, admin),
+            asyncio.to_thread(spark_master, http),
+            asyncio.to_thread(container_stats),
         )
-        return {"generatedAt": now_iso(), "spark": spark, "kafka": kafka}
+        return {"generatedAt": now_iso(), "spark": spark, "kafka": kafka, "containers": docker}
+
+    stats: dict[str, Any] = {"at": float("-inf"), "value": None}
+
+    def container_stats() -> dict[str, Any]:
+        # `docker stats` takes about two seconds, and the page polls every ten: reuse a reading for 15 s.
+        if stats["value"] is None or time.monotonic() - stats["at"] > 15:
+            stats["value"], stats["at"] = containers(), time.monotonic()
+        return stats["value"]
 
     return app
 

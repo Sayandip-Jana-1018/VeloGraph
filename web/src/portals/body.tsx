@@ -1,4 +1,5 @@
 import {
+  getClusterSnapshot,
   getDqReport,
   getInsightIndex,
   getLiveSnapshot,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/data";
 import type { Meta } from "@/lib/schemas";
 
+import { ClusterPortal } from "./cluster/cluster-portal";
 import { GraphOpsPortal } from "./graph-ops/graph-ops-portal";
 import { LakePortal } from "./lake/lake-portal";
 import { ModelsPortal } from "./models/models-portal";
@@ -20,6 +22,7 @@ import type { PortalId } from "./registry";
 import { SparkUiPortal } from "./spark-ui/spark-ui-portal";
 import { SqlPortal } from "./sql/sql-portal";
 import { StreamingPortal } from "./streaming/streaming-portal";
+import { SyllabusPortal } from "./syllabus/syllabus-portal";
 
 /** The body of each portal; the overlay and the full page render the same thing. */
 export function PortalBody({ id }: { id: PortalId }) {
@@ -42,6 +45,10 @@ export function PortalBody({ id }: { id: PortalId }) {
       return <ModelsPortal />;
     case "streaming":
       return <StreamingPortal />;
+    case "cluster":
+      return <ClusterPortal />;
+    case "syllabus":
+      return <SyllabusPortal />;
   }
 }
 
@@ -65,5 +72,9 @@ export async function portalSource(id: PortalId): Promise<Meta | undefined> {
       return (await getMlFeatures()).meta;
     case "streaming":
       return (await getLiveSnapshot()).meta;
+    case "cluster":
+      return (await getClusterSnapshot()).meta;
+    case "syllabus":
+      return undefined; // it reads every export: no single source to name
   }
 }

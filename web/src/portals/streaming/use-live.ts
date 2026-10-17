@@ -36,6 +36,38 @@ export function useLive(initial: Snapshot, connect = true) {
   useEffect(() => {
     if (!connect) return;
     let alive = true;
+    let stream: EventSource | null = null;
+
+    // The stream opens only once the gateway has answered, and closes when it stops answering: EventSource
+    // would otherwise retry every few seconds for as long as the page is open with no gateway at all.
+    const openStream = () => {
+      if (stream) return;
+      stream = new EventSource(`${GATEWAY}/api/live/stream`);
+      stream.addEventListener("batch", () => void refresh());
+      stream.addEventListener("alert", (event) => {
+        const a = JSON.parse((event as MessageEvent<string>).data) as AlertMessage;
+        const alert: LiveAlert = {
+          at: a.as_of,
+          stationId: a.stationId,
+          name: a.name,
+          risk: a.risk,
+          previous: a.previous,
+          projected: a.projectedBikes,
+          capacity: a.capacity,
+          lat: a.lat,
+          lon: a.lon,
+        };
+        setAlerts((previous) =>
+          [alert, ...previous.filter((p) => !(p.stationId === alert.stationId && p.at === alert.at))].slice(0, 50),
+        );
+      });
+      stream.onerror = () => void refresh(); // still there? the snapshot request finds out
+    };
+    const closeStream = () => {
+      stream?.close();
+      stream = null;
+    };
+
     const refresh = async () => {
       try {
         const response = await fetch(`${GATEWAY}/api/live/snapshot`, { cache: "no-store" });
@@ -46,36 +78,19 @@ export function useLive(initial: Snapshot, connect = true) {
         setSnapshot(parsed.data.data);
         setAlerts(parsed.data.data.alerts);
         setConnection("live");
+        openStream();
       } catch {
-        if (alive) setConnection("offline");
+        if (!alive) return;
+        setConnection("offline");
+        closeStream();
       }
     };
     void refresh();
     const timer = window.setInterval(refresh, 30_000);
-    const stream = new EventSource(`${GATEWAY}/api/live/stream`);
-    stream.addEventListener("batch", () => void refresh());
-    stream.addEventListener("alert", (event) => {
-      const a = JSON.parse((event as MessageEvent<string>).data) as AlertMessage;
-      const alert: LiveAlert = {
-        at: a.as_of,
-        stationId: a.stationId,
-        name: a.name,
-        risk: a.risk,
-        previous: a.previous,
-        projected: a.projectedBikes,
-        capacity: a.capacity,
-        lat: a.lat,
-        lon: a.lon,
-      };
-      setAlerts((previous) =>
-        [alert, ...previous.filter((p) => !(p.stationId === alert.stationId && p.at === alert.at))].slice(0, 50),
-      );
-    });
-    stream.onerror = () => setConnection((c) => (c === "live" ? c : "offline")); // EventSource retries by itself
     return () => {
       alive = false;
       window.clearInterval(timer);
-      stream.close();
+      closeStream();
     };
   }, [connect]);
 

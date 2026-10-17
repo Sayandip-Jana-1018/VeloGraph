@@ -6,6 +6,7 @@ import path from "node:path";
 import { cacheLife } from "next/cache";
 import type { z } from "zod";
 
+import { BATCH_JOBS, STREAMING_JOBS } from "./pipeline";
 import * as S from "./schemas";
 
 /**
@@ -208,4 +209,22 @@ export async function getLiveFeatures() {
   "use cache";
   cacheLife("max");
   return load("live-features.json", S.LiveFeatures);
+}
+
+// ---- P6.7: the cluster and the whole pipeline ------------------------------------------------------------------
+export async function getClusterSnapshot() {
+  "use cache";
+  cacheLife("max");
+  return load("cluster.json", S.ClusterSnapshot);
+}
+
+/** Every batch job of the pipeline (in run order) and every streaming run, from serving/jobs/. */
+export async function getPipelineReports() {
+  "use cache";
+  cacheLife("max");
+  const [batch, streaming] = await Promise.all([
+    Promise.all(BATCH_JOBS.map((job) => load(`jobs/${job}.json`, S.JobReport))),
+    Promise.all(STREAMING_JOBS.map((job) => load(`jobs/${job}.json`, S.JobReport))),
+  ]);
+  return { batch, streaming };
 }

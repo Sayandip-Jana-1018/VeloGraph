@@ -599,3 +599,29 @@ On a Friday at 9 pm, 37 % of stations are already empty or full: the feed shows 
 models add is the stations that are fine now and will not be in an hour, for example 80 forecast to empty and
 34 to fill. One "at risk" flag would have hidden those among a thousand others. Solid dots are the feed and
 pulsing rings the forecast, and an alert fires only when a station enters the empty or the full group.
+
+## P6.7 · Cluster and syllabus pages
+
+**Q81. On the cluster page, what are the master, a worker and an executor?**
+- **The master** (spark://spark-master:7077) owns the cluster's resources. It knows every worker and what each one
+  has free.
+- **A worker** is a machine, here a container, that offers cores and memory: 2 cores and 900 MB each.
+- **An executor** is the JVM a worker starts for one application. It runs that application's tasks and keeps its
+  cached data.
+
+The driver (in the master container, in client mode) plans the job and sends tasks to the executors. The recording
+shows two applications at once, each with one 2-core, 768 MB executor, because each asks for at most 2 cores.
+
+**Q82. What does the partition grid on the cluster page show?**
+One cell per partition of each topic. The number is the partition's leader broker, which takes every write and
+read for it. The dots are its three replicas, filled when a replica is in sync, so it can take over at once. The
+controller, chosen by the KRaft quorum, decides who leads. After a broker restart, a preferred-leader election hands
+leadership back, which is why the brokers lead 9, 9 and 8 partitions.
+
+**Q83. Why does the batch pipeline run on the laptop and not on the cluster?**
+- **Disk:** the raw files and the lake are gigabytes, and Docker on Windows reads the shared folder slowly.
+- **Memory:** the Docker VM has 6 GB for three brokers, the master, two workers and their executors.
+
+So the 14 batch jobs (38.4 minutes end to end) run on the host with `local[20]` and write compact gold tables. The
+cluster runs the streams, which read those tables and the Kafka topics. It is the same jar either way; only the
+configuration changes.

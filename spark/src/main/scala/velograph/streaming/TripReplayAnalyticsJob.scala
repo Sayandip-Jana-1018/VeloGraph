@@ -166,6 +166,8 @@ object TripReplayAnalyticsJob extends SparkJob {
     val kafka      = KafkaSettings(ctx.cfg.raw)
     val cfg        = ReplayConfig(ctx.cfg.raw)
     val checkpoint = ctx.paths.checkpoints.resolve(jobName)
+    val stopFile   = StreamRunner.stopFile(ctx.paths.root, jobName)
+    StreamRunner.clearStop(stopFile)
     if (options.fresh) StreamRunner.deleteTree(checkpoint)
 
     val names = new LakeTables(spark, ctx.paths)
@@ -242,8 +244,7 @@ object TripReplayAnalyticsJob extends SparkJob {
       .foreachBatch(toConsole)
       .start()
 
-    val stopFile = ctx.paths.root.resolve("run").resolve(s"$jobName.stop")
-    val why      = StreamRunner.awaitStop(Seq(stationQuery, systemQuery), stopFile, options.durationMin)
+    val why = StreamRunner.awaitStop(Seq(stationQuery, systemQuery), stopFile, options.durationMin)
     export.write()
     export.summary + ("stopped" -> why)
   }

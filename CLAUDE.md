@@ -85,6 +85,7 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Live scoring | `.\scripts\submit.ps1 live-station-scoring -Mode cluster -- --duration-min 30` (`--fresh` drops the checkpoint, `--source replay`); stop with `data\run\live-station-scoring.stop` |
 | ✅ Trip replay | `.\scripts\submit.ps1 trip-replay-analytics -Mode cluster -- --duration-min 8 --fresh`, then `cd python; uv run python -m velograph.ingest.trip_replayer` once `serving/live/replay-analytics.json` exists |
 | ✅ Gateway | `cd python; uv run uvicorn velograph.api.main:app --port 8000` → `/api/health`, `/api/live/snapshot`, `/api/live/stream` (SSE), `/api/cluster` |
+| ✅ Cluster snapshot | `cd python; uv run python -m velograph.ops.cluster_snapshot` (best while a streaming job runs) → `serving/cluster.json` |
 | ✅ Resilience drills | `cd python; uv run python -m velograph.ops.drills broker --broker 2 --down-s 120` · `... drills restart` (live scoring running) → `serving/live/drills.json` |
 | ✅ History server | `docker compose -f infra/docker-compose.yml --profile history up -d spark-history` → http://localhost:18080 |
 | ✅ Spark UI screenshots | `cd python; uv run python -m velograph.ops.ui_screenshots` (history server up) → `docs/assets/spark-ui/` |
@@ -194,8 +195,9 @@ push without approval.
   - both drills passed.
 
   Broker → snapshot p95 37.5 s over a 32-minute run. The `/live` page and the `streaming` portal show it all (P6.5).
-- **Next task:** P6.7 `/cluster` + `/syllabus` (the gateway's `/api/cluster` already serves the live topology), then
-  the rest of P6.4 (the home page's trip-replay hero and ⌘K search) and P7.
+- **P6.7 done 17 Oct:** the `cluster` and `syllabus` portals, at `/cluster` and `/syllabus` and in the nav. The
+  site has 11 portals.
+- **Next task:** the rest of P6.4 (the home page's trip-replay hero and ⌘K search), P6.8 polish, then P7.
   - Docker runs Kafka and the Spark cluster.
   - The GBFS recorder keeps running. It records only while the laptop is awake, and the recordings have gaps where
     it slept; the offline demo needs one full evening.

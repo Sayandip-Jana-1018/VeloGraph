@@ -18,13 +18,21 @@ object StreamRunner {
       finally stream.close()
     }
 
+  /** Where a job's stop request appears: `data/run/<job>.stop`. */
+  def stopFile(root: Path, job: String): Path = root.resolve("run").resolve(s"$job.stop")
+
+  /**
+   * Forgets a stop request left over from an earlier run. Call it first thing in a job: a request made while
+   * the job is still starting (loading models, rebuilding state) must not be thrown away.
+   */
+  def clearStop(stopFile: Path): Unit = Files.deleteIfExists(stopFile)
+
   /**
    * Blocks until the stop file appears, `durationMin` minutes pass, or a query stops. Then it stops them all,
    * rethrows the first query's error if there was one, and says why it stopped. A stop never loses data: each
    * query resumes from its checkpoint on the next start.
    */
   def awaitStop(queries: Seq[StreamingQuery], stopFile: Path, durationMin: Option[Int]): String = {
-    Files.deleteIfExists(stopFile)
     val deadline               = durationMin.map(m => System.currentTimeMillis() + m * 60000L)
     def reason: Option[String] =
       if (Files.exists(stopFile)) Some("stop file")

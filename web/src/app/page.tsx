@@ -11,7 +11,7 @@ import {
   getCityLights,
   getDqReport,
   getInsights,
-  getJobReports,
+  getPipelineReports,
   getLiveSnapshot,
   getMlRegression,
   getNetworkSummary,
@@ -20,15 +20,15 @@ import {
 } from "@/lib/data";
 import { compact, delta, duration, fixed, int } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { PORTALS, UPCOMING, type PortalId } from "@/portals/registry";
+import { PORTALS, type PortalId } from "@/portals/registry";
 
 export default async function Home() {
-  const [dq, net, rdd, insights, jobs, city, ui, reg, live] = await Promise.all([
+  const [dq, net, rdd, insights, pipeline, city, ui, reg, live] = await Promise.all([
     getDqReport(),
     getNetworkSummary(),
     getRddReport(),
     getInsights(),
-    getJobReports(),
+    getPipelineReports(),
     getCityLights(),
     getSparkUi(),
     getMlRegression(),
@@ -42,7 +42,7 @@ export default async function Home() {
   const c = net.data.communities;
   const twoD = net.data.partitioning.find((p) => p.strategy === "EdgePartition2D")!;
   const random = net.data.partitioning.find((p) => p.strategy === "RandomVertexCut")!;
-  const pipelineMs = jobs.reduce((sum, j) => sum + j.data.durationMs, 0);
+  const pipelineMs = pipeline.batch.reduce((sum, j) => sum + j.data.durationMs, 0);
 
   const figure: Record<PortalId, string> = {
     lake: `${compact(dq.data.validRows)} clean trips`,
@@ -54,6 +54,8 @@ export default async function Home() {
     "graph-ops": `${fixed(twoD.replicationFactor, 1)} vs ${fixed(random.replicationFactor, 1)} copies`,
     models: `${fixed(reg.data.targets.departures.improvementVsNaive, 0)} % under seasonal naive`,
     streaming: `${int(live.data.kpis.stations)} stations every 30 s`,
+    cluster: `${pipeline.batch.length} jobs in ${duration(pipelineMs)}`,
+    syllabus: "6 units · 3 COs, all traced",
   };
   const facts = [
     `${int(dq.data.validRows)} clean trips`,
@@ -76,8 +78,22 @@ export default async function Home() {
     "spark-ui": "lg:col-span-4",
     models: "lg:col-span-4",
     streaming: "lg:col-span-4",
+    cluster: "lg:col-span-6",
+    syllabus: "lg:col-span-6",
   };
-  const order: PortalId[] = ["network", "pregel", "graph-ops", "lake", "rdd-lab", "sql", "spark-ui", "models", "streaming"];
+  const order: PortalId[] = [
+    "network",
+    "pregel",
+    "graph-ops",
+    "lake",
+    "rdd-lab",
+    "sql",
+    "spark-ui",
+    "models",
+    "streaming",
+    "cluster",
+    "syllabus",
+  ];
 
   return (
     <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
@@ -229,18 +245,6 @@ export default async function Home() {
               </Reveal>
             );
           })}
-        </div>
-
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {UPCOMING.map((u, i) => (
-            <Reveal key={u.title} delay={0.05 * i}>
-              <div className="h-full rounded-[var(--radius-card)] border border-dashed border-white/15 p-7 text-center text-fg-3">
-                <p className="font-hand text-lg text-fg-2">coming in {u.phase}</p>
-                <p className="font-display text-xl font-bold text-fg-2">{u.title}</p>
-                <p className="mt-1 text-sm">{u.note}</p>
-              </div>
-            </Reveal>
-          ))}
         </div>
       </section>
     </div>

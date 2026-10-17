@@ -7,10 +7,11 @@ import { ThemeSwitcher } from "./theme-switcher";
 const NAV = [
   { href: "/#portals", label: "Portals" },
   { href: "/portal/network", label: "Network" },
-  { href: "/portal/pregel", label: "Pregel" },
   { href: "/portal/spark-ui", label: "Spark UI" },
   { href: "/portal/models", label: "Models" },
   { href: "/live", label: "Live" },
+  { href: "/cluster", label: "Cluster" },
+  { href: "/syllabus", label: "Syllabus" },
 ];
 
 export function SiteHeader() {
