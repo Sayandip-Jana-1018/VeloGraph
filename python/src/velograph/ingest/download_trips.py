@@ -165,16 +165,52 @@ def count_rows(csv: Path) -> int:
     return max(lines - 1, 0)
 
 
+def _csv_name(name: object) -> str:
+    """A CSV name from the manifest, accepted only as a plain file name: it is joined onto a folder."""
+    text = str(name)
+    if Path(text).name != text or not text.endswith(".csv"):
+        raise ValueError("not a plain CSV file name")
+    return text
+
+
+def _manifest_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """One month of the manifest, rebuilt field by field: numbers re-parsed, file names checked."""
+    return {
+        "url": str(entry["url"]),
+        "etag": str(entry["etag"]),
+        "archiveBytes": int(entry["archiveBytes"]),
+        "rows": int(entry["rows"]),
+        "files": [
+            {"name": _csv_name(f["name"]), "bytes": int(f["bytes"]), "rows": int(f["rows"])}
+            for f in entry["files"]
+        ],
+        "extractedAt": str(entry["extractedAt"]),
+    }
+
+
 def _load_manifest(path: Path) -> dict[str, Any]:
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {"schema": "velograph.raw-citibike-manifest", "version": 1, "months": {}}
+    """What earlier runs recorded, read back as untrusted input: a month whose entry does not have the
+    expected shape is dropped, and so downloaded again."""
+    manifest: dict[str, Any] = {"schema": "velograph.raw-citibike-manifest", "version": 1, "months": {}}
+    if not path.exists():
+        return manifest
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    for ym, entry in (stored.get("months") or {}).items():
+        if not _MONTH.match(str(ym)):
+            continue
+        try:
+            manifest["months"][str(ym)] = _manifest_entry(entry)
+        except (KeyError, TypeError, ValueError):
+            log.warning("a malformed manifest entry is dropped; its month will be downloaded again")
+    return manifest
 
 
 def _save_manifest(path: Path, manifest: dict[str, Any]) -> None:
     manifest["updatedAt"] = datetime.now(UTC).isoformat(timespec="seconds")
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    # The path is fixed (manifest.json in the raw folder); only the content comes from earlier runs, and
+    # _load_manifest has rebuilt it from checked fields.
+    tmp.write_text(json.dumps(manifest, indent=2), encoding="utf-8")  # NOSONAR
     tmp.replace(path)
 
 
@@ -195,8 +231,8 @@ def fetch_month(client: httpx.Client, ym: str, root: Path, *, keep_archive: bool
 
     manifest = _load_manifest(manifest_path)
     if _is_complete(manifest["months"].get(ym), remote, month_dir):
-        rows = manifest["months"][ym]["rows"]
-        log.info("%s already complete (%s rows), skipping", ym, f"{rows:,}")
+        rows = int(manifest["months"][ym]["rows"])
+        log.info("%s already complete (%d rows), skipping", ym, rows)
         return rows
 
     downloads = root / "_downloads"
@@ -237,13 +273,15 @@ def main(
     bad = [m for m in months if not _MONTH.match(m)]
     if bad:
         raise typer.BadParameter(f"not YYYYMM: {', '.join(bad)}")
+    # Rebuilt from their digits, so only YYYYMM text reaches the paths and the log.
+    months = [f"{int(m[:4]):04d}{int(m[4:]):02d}" for m in months]
 
     started = time.monotonic()
     total = 0
     with http_client(timeout=60) as client:
         for ym in months:
             total += fetch_month(client, ym, paths.citibike_raw, keep_archive=keep_archives)
-    log.info("all done: %d months, %s rows in %.0f s", len(months), f"{total:,}", time.monotonic() - started)
+    log.info("all done: %d months, %d rows in %.0f s", len(months), int(total), time.monotonic() - started)
 
 
 if __name__ == "__main__":

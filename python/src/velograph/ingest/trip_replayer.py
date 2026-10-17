@@ -96,7 +96,8 @@ def schedule(
     trips: list[Trip], *, late_share: float, late_min: float, late_max: float, seed: int
 ) -> list[Scheduled]:
     """When each trip is sent, in event-time seconds: at its start, or later for the chosen late share."""
-    rng = random.Random(seed)
+    # Seeded on purpose, so every run delays the same trips: a reproducible simulation, not a security use.
+    rng = random.Random(seed)  # NOSONAR
     out = []
     for t in trips:
         late = rng.random() < late_share

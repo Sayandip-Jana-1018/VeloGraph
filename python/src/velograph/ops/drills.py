@@ -41,6 +41,13 @@ JOB = "live-station-scoring"
 WATCHED = (Topics.STATION_STATUS, Topics.PREDICTIONS, Topics.ALERTS)
 
 
+def _number(value: Any) -> float | None:
+    """A measurement from an export, or None: samples are logged and recorded, so free text never gets in."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value) if isinstance(value, int) else float(value)
+
+
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))["data"]
@@ -81,11 +88,11 @@ def sample(admin: AdminClient, live: Path, started: float) -> dict[str, Any]:
     return {
         "t": round(time.monotonic() - started, 1),
         **kafka,
-        "delivered": producer.get("delivered"),
-        "failed": producer.get("failed"),
-        "ackP95Ms": (producer.get("ackMs") or {}).get("p95"),
-        "lastBatch": last.get("batchId"),
-        "latencyS": (last.get("scoring") or {}).get("latencyS"),
+        "delivered": _number(producer.get("delivered")),
+        "failed": _number(producer.get("failed")),
+        "ackP95Ms": _number((producer.get("ackMs") or {}).get("p95")),
+        "lastBatch": _number(last.get("batchId")),
+        "latencyS": _number((last.get("scoring") or {}).get("latencyS")),
     }
 
 

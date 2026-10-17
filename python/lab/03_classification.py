@@ -211,7 +211,7 @@ for algo, grid in GRID.items():
 chosen = {
     algo: max(runs, key=lambda r: r["validation"]["macroF1"])["params"] for algo, runs in tuning.items()
 }
-chosen
+print(chosen)
 
 # %% [markdown]
 # ## 4. The leaderboard: refit on August, report September
