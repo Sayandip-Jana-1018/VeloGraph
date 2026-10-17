@@ -6,8 +6,11 @@ half up (Kafka running, Spark stopped) instead of an error page.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
+import subprocess
 from typing import Any
 
 import httpx
@@ -51,20 +54,89 @@ def spark_master(http: httpx.Client, url: str = SPARK_MASTER_UI) -> dict[str, An
             }
             for w in d.get("workers", [])
         ],
-        "activeApps": [
-            {
-                "id": a.get("id"),
-                "name": a.get("name"),
-                "cores": a.get("cores"),
-                "memoryPerExecutorMb": a.get("memoryperslave") or a.get("memoryperexecutor"),
-                "startTime": a.get("starttime"),
-                "durationMs": a.get("duration"),
-                "state": a.get("state"),
-            }
-            for a in d.get("activeapps", [])
-        ],
+        "activeApps": [_app(a) for a in d.get("activeapps", [])],
         "completedApps": len(d.get("completedapps", [])),
+        # Newest first: what the cluster ran since it started.
+        "completed": [
+            _app(a) for a in sorted(d.get("completedapps", []), key=lambda a: -a.get("starttime", 0))
+        ][:12],
     }
+
+
+def _app(a: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": a.get("id"),
+        "name": a.get("name"),
+        "cores": a.get("cores"),
+        "memoryPerExecutorMb": a.get("memoryperexecutor") or a.get("memoryperslave"),
+        "startTime": a.get("starttime"),
+        "durationMs": a.get("duration"),
+        "state": a.get("state"),
+    }
+
+
+_UNITS = {
+    "B": 1 / 2**20,
+    "KiB": 1 / 1024,
+    "MiB": 1.0,
+    "GiB": 1024.0,
+    "kB": 1e3 / 2**20,
+    "MB": 1e6 / 2**20,
+    "GB": 1e9 / 2**20,
+}
+
+
+def mebibytes(size: str) -> float:
+    """``docker stats`` sizes ("137.1MiB", "1.375GiB", "448MiB") in MiB."""
+    match = re.fullmatch(r"([\d.]+)\s*([A-Za-z]+)", size.strip())
+    if match is None:
+        raise ValueError(f"not a size: {size!r}")
+    return round(float(match[1]) * _UNITS[match[2]], 1)
+
+
+def parse_stats(lines: list[str], prefix: str = "velograph-") -> list[dict[str, Any]]:
+    """Per project container, from ``docker stats --format '{{json .}}'``: memory used and capped, CPU."""
+    rows = []
+    for line in lines:
+        if not line.strip():
+            continue
+        d = json.loads(line)
+        if not d["Name"].startswith(prefix):
+            continue
+        used, limit = (mebibytes(x.strip()) for x in d["MemUsage"].split("/"))
+        rows.append(
+            {
+                "name": d["Name"].removeprefix(prefix),
+                "memUsedMb": used,
+                "memLimitMb": limit,
+                "cpuPct": float(d["CPUPerc"].rstrip("%") or 0),
+            }
+        )
+    return sorted(rows, key=lambda r: r["name"])
+
+
+def containers(timeout: float = 10.0) -> dict[str, Any]:
+    """Memory and CPU of every VeloGraph container, against the memory of the Docker VM (ADR 009)."""
+    try:
+        stats = subprocess.run(
+            ["docker", "stats", "--no-stream", "--format", "{{json .}}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=True,
+        ).stdout
+        total = subprocess.run(
+            ["docker", "info", "--format", "{{.MemTotal}}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=True,
+        ).stdout
+        rows = parse_stats(stats.splitlines())
+        vm = round(int(total.strip()) / 2**20, 1)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": True, "vmMemoryMb": vm, "containers": rows}
 
 
 def kafka_cluster(admin: AdminClient, group: str = "velograph-gateway") -> dict[str, Any]:

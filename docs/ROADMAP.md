@@ -375,13 +375,29 @@ Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink ann
   residuals, importances, ablation, archetype profiles + PCA, heat map. Built as the `models` portal
   (`/portal/models`, in the nav), with the leakage-safe windows timeline, the feature dictionary and the Scala ↔ lab
   parity table.
-- [ ] **P6.7 `/cluster` + `/syllabus`** — live topology (brokers, partitions, leaders, ISR; Spark master, workers,
-  apps), job timeline; traceability table in which every row opens its portal.
+- [x] **P6.7 `/cluster` + `/syllabus`** — live topology (brokers, partitions, leaders, ISR; Spark master, workers,
+  apps), job timeline; traceability table in which every row opens its portal. Built as the `cluster` and
+  `syllabus` portals, with `/cluster` and `/syllabus` as their pages and links in the nav.
+  - **Cluster:** the topology follows the gateway's `/api/cluster` every 10 s (container memory included). When
+    nothing runs, it shows the recording in `serving/cluster.json` (`velograph.ops.cluster_snapshot`).
+    It also has the 14-job pipeline as a waterfall and the host-versus-cluster split.
+  - **Syllabus:** units I–VI and CO4–CO6, each with one measured number and links that open its portals; the
+    five practicals; Unit II shown in six excerpts of our own Scala.
 - [ ] **P6.8 Polish** — ≥ 1280 px primary + tablet, WCAG AA contrast, reduced motion and reduced transparency,
   loading/empty/error/offline states, Lighthouse ≥ 90 on non-map pages.
 
 **Gate C:** every page and portal renders real exports; the site works with the gateway down; the production build
 passes.
+**Evidence (P6.7, 17 Oct):**
+- **Cluster recording:** both streaming apps running side by side at 2 cores each, so both workers were full
+  (2 / 2 cores, 768 / 900 MB); 9 applications finished on the cluster.
+  - 3 brokers with controller 2, and leadership spread 9 / 9 / 8.
+  - 7 containers using 3.6 of 5.8 GB with both streams running.
+- **Pipeline:** 14 batch jobs, 38.4 min end to end; the longest is feature-build at 7.2 min.
+- **Syllabus:** 6 / 6 units and 3 / 3 COs traced. Code: 7,181 lines of Scala (57 files, 74 tests), 3,002 of
+  Python (30 tests), 817 in the lab, 14 SQL files.
+- **Build:** 30 static pages.
+
 **Evidence (P6.1–P6.3, 16 Oct):**
 - **Portals:** 7, all reading real exports.
 - **Build and checks:** `pnpm build` passes (19 prerendered pages); `pnpm lint` reports 0 problems; `pnpm

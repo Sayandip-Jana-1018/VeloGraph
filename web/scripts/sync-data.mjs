@@ -41,6 +41,13 @@ const SNIPPETS = [
   { id: "stream-risk", file: `${scala}/streaming/LiveRules.scala`, start: "(1 - fraction) * d0", end: /else Ok/ },
   { id: "stream-rebalance", file: `${scala}/streaming/LiveRules.scala`, start: "def plan(stations", end: /moves\.take\(rule\.maxMoves\)/ },
   { id: "stream-replay-windows", file: `${scala}/streaming/TripReplayAnalyticsJob.scala`, start: "def perStation(", end: /^      \)$/ },
+  // Unit II: Scala in this codebase (the syllabus portal).
+  { id: "scala-case-class", file: `${scala}/streaming/LiveRules.scala`, start: "final case class StationStatus(", end: /def docksInTotal/ },
+  { id: "scala-pattern-match", file: `${scala}/ml/FeaturePipeline.scala`, start: "algorithm match {", end: /case other => throw/ },
+  { id: "scala-option-try", file: `${scala}/ml/TrainChampionJob.scala`, start: "def champions(raw: Config)", end: /^  }$/ },
+  { id: "scala-higher-order", file: `${scala}/ml/ArchetypeTransforms.scala`, start: "def distinct(names: Seq[String])", end: /^    }$/ },
+  { id: "scala-immutable", file: `${scala}/ml/FeatureTransforms.scala`, start: "def alignCommunities(", end: /\.toMap \+ \(0 -> 0\)/ },
+  { id: "scala-trait", file: `${scala}/common/SparkJob.scala`, start: "trait SparkJob {", end: /def sparkConf/ },
 ];
 
 function copyTree(from, to, keep) {
@@ -77,6 +84,29 @@ cpSync(join(web, "node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs"), join(w
 const snippets = Object.fromEntries(SNIPPETS.map((s) => [s.id, excerpt(s)]));
 mkdirSync(join(web, "src/generated"), { recursive: true });
 writeFileSync(join(web, "src/generated/snippets.json"), JSON.stringify(snippets, null, 2) + "\n");
+
+// Size of the codebase, for the syllabus portal: files, non-blank lines, and tests, per language.
+function sources(dir, pattern) {
+  if (!existsSync(join(repo, dir))) return [];
+  return readdirSync(join(repo, dir), { recursive: true })
+    .filter((f) => pattern.test(f) && !/node_modules|[\\/]generated[\\/]/.test(f))
+    .map((f) => readFileSync(join(repo, dir, f), "utf8"));
+}
+function measure(texts, testPattern) {
+  return {
+    files: texts.length,
+    lines: texts.reduce((n, t) => n + t.split(/\r?\n/).filter((l) => l.trim()).length, 0),
+    tests: testPattern ? texts.reduce((n, t) => n + (t.match(testPattern) ?? []).length, 0) : undefined,
+  };
+}
+const codeStats = {
+  scala: { ...measure(sources("spark/src/main/scala", /\.scala$/)), tests: measure(sources("spark/src/test/scala", /\.scala$/), /\btest\(\s*s?"/g).tests },
+  python: { ...measure(sources("python/src", /\.py$/)), tests: measure(sources("python/tests", /\.py$/), /^def test_/gm).tests },
+  lab: measure(sources("python/lab", /\.py$/)),
+  sql: measure(sources("spark/src/main/resources/sql", /\.sql$/)),
+  web: measure(sources("web/src", /\.tsx?$/)),
+};
+writeFileSync(join(web, "src/generated/code-stats.json"), JSON.stringify(codeStats, null, 2) + "\n");
 
 const files = (dir) => readdirSync(dir, { recursive: true }).filter((f) => /\.[a-z]+$/i.test(f)).length;
 console.log(

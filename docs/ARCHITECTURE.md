@@ -549,6 +549,7 @@ portals quote).
 | `live/producer-stats.json` | gbfs_producer, every minute | `streaming` portal |
 | `live/replay-analytics.json` (windows in both output modes, late data) | TripReplayAnalyticsJob | `streaming` portal |
 | `live/drills.json` (broker and restart drills, sample by sample) | `velograph.ops.drills` | `streaming` portal |
+| `cluster.json` (Spark master, workers and applications; brokers, controller, every partition's leader and ISR; container memory) | `velograph.ops.cluster_snapshot`, taken while the streams run | `cluster` portal (the gateway's `/api/cluster` when it is up) |
 
 Every file uses one envelope:
 
@@ -571,7 +572,7 @@ Every file uses one envelope:
 | `GET /api/live/snapshot` | latest `snapshot.json` |
 | `GET /api/live/{progress,producer,replay}` | the other live exports |
 | `GET /api/live/stream` | SSE from Kafka (consumer group `velograph-gateway`): `hello`, one `batch` summary per micro-batch (counts by state), every `alert` |
-| `GET /api/cluster` | Spark master `/json` (workers, cores, memory, apps) + Kafka AdminClient metadata (brokers, controller, partitions, leaders, ISR) + the gateway group's lag |
+| `GET /api/cluster` | Spark master `/json` (workers, cores, memory, running and finished apps) + Kafka AdminClient metadata (brokers, controller, partitions, leaders, ISR) + the gateway group's lag + `docker stats` per container (cached 15 s) |
 | `POST /api/sql` *(stretch)* | read-only Spark SQL on gold tables, LIMIT 500, 20 s timeout |
 
 ## 11. Web experience
@@ -586,8 +587,8 @@ motion, deck.gl 9 + MapLibre 6 via react-map-gl 8 (CARTO Dark Matter basemap, no
 | `/network` | GraphX | AM ↔ PM PageRank morph slider, communities, travel-time isochrones |
 | `/models` | MLlib | leaderboards vs baselines, confusion matrix, ablation, archetype profiles, heat map |
 | `/insights` | Spark SQL | insight cards with "View SQL" |
-| `/cluster` | Cluster computing | live topology: 3 brokers (leaders/ISR), Spark master + workers, streaming health, job timeline |
-| `/syllabus` | Traceability | unit/CO → feature → evidence |
+| `/cluster` | Cluster computing (built) | the Spark workers and apps and the Kafka brokers with every partition's leader and ISR, live every 10 s or recorded; the pipeline as a waterfall; where each job runs |
+| `/syllabus` | Traceability (built) | units I–VI and CO4–CO6 → what was built → one measured number → the portals; the five practicals; Unit II in our Scala |
 
 **Evidence portals** ([ADR 011](adr/011-inkglass-design-and-portals.md)). Every module of the project has a portal: a
 full-screen glass sheet with its own URL (`/portal/<id>`, a Next.js parallel `@portal` slot plus an intercepting

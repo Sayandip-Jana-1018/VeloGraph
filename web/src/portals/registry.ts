@@ -11,6 +11,8 @@ export const PORTAL_IDS = [
   "graph-ops",
   "models",
   "streaming",
+  "cluster",
+  "syllabus",
 ] as const;
 export type PortalId = (typeof PORTAL_IDS)[number];
 
@@ -116,12 +118,26 @@ export const PORTALS: PortalMeta[] = [
     accent: "teal",
     sources: ["live/snapshot.json", "live/stream-progress.json", "live/replay-analytics.json", "live/drills.json"],
   },
-];
-
-/** Portals planned for the next phases, shown as sketches so the whole syllabus is visible from day one. */
-export const UPCOMING = [
-  { title: "Cluster", note: "Spark master, workers, brokers, job timeline", phase: "P6" },
-  { title: "Syllabus", note: "Every unit and CO, one click from its evidence", phase: "P6" },
+  {
+    id: "cluster",
+    title: "The cluster",
+    kicker: "Spark and Kafka, live",
+    hook: "Workers, executors, brokers, leaders and in-sync replicas as they are now, and the whole pipeline timed end to end.",
+    units: ["Unit I", "Unit V"],
+    outcomes: ["CO5"],
+    accent: "amber",
+    sources: ["cluster.json", "jobs/*.json"],
+  },
+  {
+    id: "syllabus",
+    title: "Syllabus",
+    kicker: "Every unit, traced",
+    hook: "Units I to VI and CO4 to CO6, each with what was built, one measured number, and the portals that prove it.",
+    units: ["Units I–VI"],
+    outcomes: ["CO4", "CO5", "CO6"],
+    accent: "violet",
+    sources: ["every export above", "the code itself"],
+  },
 ];
 
 export function portalById(id: string): PortalMeta | undefined {

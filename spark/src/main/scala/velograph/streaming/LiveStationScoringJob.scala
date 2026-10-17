@@ -74,6 +74,8 @@ object LiveStationScoringJob extends SparkJob {
     val kafka      = KafkaSettings(ctx.cfg.raw)
     val live       = LiveConfig(ctx.cfg.raw)
     val checkpoint = ctx.paths.checkpoints.resolve(s"$jobName-${options.source}")
+    val stopFile   = StreamRunner.stopFile(ctx.paths.root, jobName)
+    StreamRunner.clearStop(stopFile)
     if (options.fresh) StreamRunner.deleteTree(checkpoint)
 
     val progress = new ProgressExport(
@@ -133,7 +135,6 @@ object LiveStationScoringJob extends SparkJob {
       .option("checkpointLocation", checkpoint.resolve("dead-letters").uri)
       .start()
 
-    val stopFile   = ctx.paths.root.resolve("run").resolve(s"$jobName.stop")
     val stopReason = StreamRunner.awaitStop(Seq(scoring, deadLetters), stopFile, options.durationMin)
     scorer.summary + ("stopped" -> stopReason) + ("source" -> options.source)
   }

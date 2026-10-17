@@ -905,3 +905,79 @@ export const LiveFeatures = envelope(
   }),
 );
 export type LiveFeatures = z.infer<typeof LiveFeatures>;
+
+// ---- P6.7: the cluster, as the gateway reports it (and serving/cluster.json recorded it) ----------------------
+const SparkApp = z.object({
+  id: z.string().nullable(),
+  name: z.string().nullable(),
+  cores: z.number().nullable(),
+  memoryPerExecutorMb: z.number().nullable(),
+  startTime: z.number().nullable(),
+  durationMs: z.number().nullable(),
+  state: z.string().nullable(),
+});
+export type SparkApp = z.infer<typeof SparkApp>;
+
+export const SparkMaster = z.object({
+  ok: z.boolean(),
+  error: z.string().nullish(),
+  url: z.string().nullish(),
+  status: z.string().nullish(),
+  aliveWorkers: z.number().optional(),
+  cores: z.number().optional(),
+  coresUsed: z.number().optional(),
+  memoryMb: z.number().optional(),
+  memoryUsedMb: z.number().optional(),
+  workers: z
+    .array(
+      z.object({
+        id: z.string(),
+        host: z.string(),
+        cores: z.number(),
+        coresUsed: z.number(),
+        memoryMb: z.number(),
+        memoryUsedMb: z.number(),
+        state: z.string(),
+        lastHeartbeat: z.number(),
+      }),
+    )
+    .optional(),
+  activeApps: z.array(SparkApp).optional(),
+  completedApps: z.number().optional(),
+  completed: z.array(SparkApp).optional(),
+});
+
+export const KafkaCluster = z.object({
+  ok: z.boolean(),
+  error: z.string().nullish(),
+  clusterId: z.string().nullish(),
+  controller: z.number().optional(),
+  brokers: z.array(z.object({ id: z.number(), host: z.string(), port: z.number() })).optional(),
+  topics: z
+    .array(
+      z.object({
+        name: z.string(),
+        partitions: z.array(
+          z.object({ id: z.number(), leader: z.number(), replicas: z.array(z.number()), isr: z.array(z.number()) }),
+        ),
+      }),
+    )
+    .optional(),
+  gatewayLag: z.object({ group: z.string(), lag: z.record(z.string(), z.number()) }).nullish(),
+});
+
+export const Containers = z.object({
+  ok: z.boolean(),
+  error: z.string().nullish(),
+  vmMemoryMb: z.number().optional(),
+  containers: z
+    .array(z.object({ name: z.string(), memUsedMb: z.number(), memLimitMb: z.number(), cpuPct: z.number() }))
+    .optional(),
+});
+
+export const ClusterData = z.object({ spark: SparkMaster, kafka: KafkaCluster, containers: Containers });
+export type ClusterData = z.infer<typeof ClusterData>;
+export const ClusterSnapshot = envelope(ClusterData);
+export type ClusterSnapshot = z.infer<typeof ClusterSnapshot>;
+/** `/api/cluster`: the same, read just now. */
+export const ClusterLive = ClusterData.extend({ generatedAt: z.string() });

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from velograph.api.cluster import mebibytes, parse_stats
 from velograph.api.live import BatchAssembler, Broadcaster
 from velograph.api.main import create_app
 
@@ -72,3 +73,15 @@ def test_health_reports_what_is_missing_instead_of_failing(tmp_path: Path, monke
     assert health["status"] == "degraded"
     assert health["kafka"] == {"ok": False, "brokers": 0, "error": "no brokers"}
     assert health["snapshot"] == {"exists": False}
+
+
+def test_docker_stats_become_mebibytes_per_project_container():
+    assert (mebibytes("137.1MiB"), mebibytes("1.375GiB"), mebibytes("0B")) == (137.1, 1408.0, 0.0)
+    lines = [
+        '{"Name":"velograph-kafka-1","MemUsage":"454.9MiB / 640MiB","CPUPerc":"1.25%"}',
+        '{"Name":"splitx-app","MemUsage":"1GiB / 2GiB","CPUPerc":"0.00%"}',
+        "",
+    ]
+    assert parse_stats(lines) == [
+        {"name": "kafka-1", "memUsedMb": 454.9, "memLimitMb": 640.0, "cpuPct": 1.25}
+    ]

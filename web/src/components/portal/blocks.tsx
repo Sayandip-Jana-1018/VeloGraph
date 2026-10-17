@@ -51,14 +51,22 @@ async function highlight(code: string, lang: string): Promise<string> {
 }
 
 /** "How Spark did it": a real excerpt of the Scala or PySpark code, extracted at sync time, highlighted on the server. */
-export async function CodePanel({ id, caption }: { id: SnippetId; caption: string }) {
+export async function CodePanel({
+  id,
+  caption,
+  kicker = "How Spark did it",
+}: {
+  id: SnippetId;
+  caption: string;
+  kicker?: string;
+}) {
   const snippet = snippets[id];
   const html = await highlight(snippet.code, snippet.lang);
   return (
     <Glass variant="inset" className="code-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 px-5 py-3">
         <p className="font-display text-sm font-bold text-fg">
-          <span className="mr-2 font-hand text-lg font-normal text-marker">How Spark did it</span>
+          <span className="mr-2 font-hand text-lg font-normal text-marker">{kicker}</span>
           {caption}
         </p>
         <p className="font-mono text-xs text-fg-3">
