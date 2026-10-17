@@ -80,6 +80,12 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ ML features | `.\scripts\submit.ps1 station-archetypes -DriverMemory 6g` (~3 min) · `feature-build -DriverMemory 7g` (~7 min) → `gold/station_archetypes`, `gold/ml_features` |
 | ✅ ML lab | `cd python; uv run jupytext --to ipynb --execute lab/01_eda.py` (then `02_regression`, `03_classification`, `04_ablation`; one at a time: each takes an 8 GB driver) |
 | ✅ Champion models | `.\scripts\submit.ps1 train-champion -DriverMemory 8g` (~3 min) → `data/models/*`, `serving/model-cards.json`; fails unless it reproduces the lab within 1 % |
+| ✅ Live features | `.\scripts\submit.ps1 live-features -DriverMemory 6g` (~5 min) → `gold/live_stations`, `gold/live_profiles` (after `station-archetypes`) |
+| ✅ GBFS → Kafka | `cd python; uv run python -m velograph.ingest.gbfs_producer` (live) · `--source recorded --day 2026-10-16 --start 07:30 --speed 20` (replay); stop with `data\run\gbfs_producer.stop` or Ctrl+C |
+| ✅ Live scoring | `.\scripts\submit.ps1 live-station-scoring -Mode cluster -- --duration-min 30` (`--fresh` drops the checkpoint, `--source replay`); stop with `data\run\live-station-scoring.stop` |
+| ✅ Trip replay | `.\scripts\submit.ps1 trip-replay-analytics -Mode cluster -- --duration-min 8 --fresh`, then `cd python; uv run python -m velograph.ingest.trip_replayer` once `serving/live/replay-analytics.json` exists |
+| ✅ Gateway | `cd python; uv run uvicorn velograph.api.main:app --port 8000` → `/api/health`, `/api/live/snapshot`, `/api/live/stream` (SSE), `/api/cluster` |
+| ✅ Resilience drills | `cd python; uv run python -m velograph.ops.drills broker --broker 2 --down-s 120` · `... drills restart` (live scoring running) → `serving/live/drills.json` |
 | ✅ History server | `docker compose -f infra/docker-compose.yml --profile history up -d spark-history` → http://localhost:18080 |
 | ✅ Spark UI screenshots | `cd python; uv run python -m velograph.ops.ui_screenshots` (history server up) → `docs/assets/spark-ui/` |
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
@@ -103,6 +109,14 @@ Windows gotchas, learned the hard way:
 - `jupytext --sync` reads files in the Windows code page; run it with `PYTHONUTF8=1`.
 - PySpark's `OneVsRestModel` scores with Python UDFs, and a Python worker can drop its socket on Windows
   ("Connection reset by peer"). Lab 03 writes one-vs-rest out with built-in column functions instead.
+- The Windows clock runs 92 s slow (its time service is off) while the Docker VM's is right. Never compare a host
+  timestamp with a container one: latency is measured on the cluster against the broker's append time, and the
+  producer corrects itself from the feed's `Date` + `Age` headers. Waiting for a file written in a container by
+  its mtime fails for the same reason: wait for the file to appear instead.
+- Don't rebuild the fat jar while a cluster job runs: the driver and executors load classes from it lazily.
+- Long heredocs break the Bash tool's parser; write patch scripts to the scratchpad and run them.
+- A `threading.Thread` subclass must not define `_stop` or `_bootstrap` (they are Thread internals): the gateway
+  consumer owns a thread instead of being one.
 
 ## Engineering conventions
 
@@ -170,7 +184,21 @@ push without approval.
 
   The demand models beat the seasonal naive forecast by 6.6 % (departures) and 6.3 % (arrivals). The 10 % target is
   not met, and this is reported honestly. The `models` portal shows it all.
-- **Next task:** P5.1 Kafka topics. Docker Desktop must be running for P5 (it was down after the 16 Oct reboot).
-  Stop the Spark containers before heavy host runs. The GBFS recorder keeps running in the background.
+- **P5 done 17 Oct, Gate B met** (evidence in ROADMAP; [ADR 014](docs/adr/014-live-scoring-state-risk-and-latency.md)):
+  - the GBFS producer (CDC, `acks=all`, idempotent, recorded replay);
+  - `LiveFeaturesJob` (profile-l features);
+  - `LiveStationScoringJob` on the Docker cluster (watermark, dedupe, three champions, six states, moves; Kafka,
+    Parquet and snapshot sinks);
+  - `TripReplayAnalyticsJob` (append and update modes, late data);
+  - the FastAPI gateway (SSE, cluster topology);
+  - both drills passed.
+
+  Broker → snapshot p95 37.5 s over a 32-minute run. The `/live` page and the `streaming` portal show it all (P6.5).
+- **Next task:** P6.7 `/cluster` + `/syllabus` (the gateway's `/api/cluster` already serves the live topology), then
+  the rest of P6.4 (the home page's trip-replay hero and ⌘K search) and P7.
+  - Docker runs Kafka and the Spark cluster.
+  - The GBFS recorder keeps running. It records only while the laptop is awake, and the recordings have gaps where
+    it slept; the offline demo needs one full evening.
+  - The producer, gateway and scoring job are started on demand (commands above).
 - **Open questions:** none. Option for the user: raising `.wslconfig` `memory=` to 8 GB would add cluster headroom
   (ADR 009); not needed so far.

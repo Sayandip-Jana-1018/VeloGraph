@@ -292,22 +292,57 @@ StandardScaler, Pipeline.
 
 ### P5 · Kafka + Structured Streaming — D5 → Gate B
 
-- [ ] **P5.1 Topics** — bootstrap script: partitions, RF 3, `min.insync.replicas=2`, retention, compaction for weather.
-- [ ] **P5.2 `gbfs_producer`** — TTL-aware polling, CDC, idempotent producer (`acks=all`), weather publishing, DLQ,
+- [x] **P5.1 Topics** — bootstrap script: partitions, RF 3, `min.insync.replicas=2`, retention, compaction for weather.
+  Also `LogAppendTime` on station-status and a preferred-leader election after a restart.
+- [x] **P5.2 `gbfs_producer`** — TTL-aware polling, CDC, idempotent producer (`acks=all`), weather publishing, DLQ,
   `--source recorded` replay.
-- [ ] **P5.3 `LiveStationScoringJob`** — ARCHITECTURE §9.4: watermark + `dropDuplicatesWithinWatermark`, broadcast
+- [x] **P5.3 `LiveStationScoringJob`** — ARCHITECTURE §9.4: watermark + `dropDuplicatesWithinWatermark`, broadcast
   enrichment, champion models, projected availability, risk, regime, rebalancing moves; Kafka + Parquet + atomic
-  snapshot sinks; checkpointing.
-- [ ] **P5.4 Replay analytics** — `trip_replayer` + `TripReplayAnalyticsJob` (tumbling & sliding windows, watermarks,
+  snapshot sinks; checkpointing. Live features from `LiveFeaturesJob` ([ADR 014](adr/014-live-scoring-state-risk-and-latency.md)).
+- [x] **P5.4 Replay analytics** — `trip_replayer` + `TripReplayAnalyticsJob` (tumbling & sliding windows, watermarks,
   late-data metrics, update vs append).
-- [ ] **P5.5 Gateway** — FastAPI: `/api/health`, `/api/live/snapshot`, `/api/live/stream` (SSE, consumer group),
+- [x] **P5.5 Gateway** — FastAPI: `/api/health`, `/api/live/snapshot`, `/api/live/stream` (SSE, consumer group),
   `/api/cluster`.
-- [ ] **P5.6 Resilience drills** — stop a broker mid-stream; kill and restart the streaming job (resumes from its
-  checkpoint). Record outcomes and screenshots.
+- [x] **P5.6 Resilience drills** — stop a broker mid-stream; kill and restart the streaming job (resumes from its
+  checkpoint). Recorded by `velograph.ops.drills` in `serving/live/drills.json` and shown in the `streaming` portal.
 
 **Gate B:** live GBFS → snapshot p95 < 90 s; 30-min run without errors; both drills pass; the snapshot carries risks
 and suggested moves.
-**Evidence:** _pending_
+**Evidence (17 Oct):** **Gate B met.**
+- **P5.1 topics:** 7 topics with RF 3 and min ISR 2, and a compacted weather topic.
+  - KRaft quorum of 3 voters with follower lag 0.
+  - After Docker Desktop restarted, broker 2 led all 26 partitions. The preferred-leader election spread them
+    9 / 9 / 8.
+- **P5.2 producer:** 30,530 station messages in its first 2.5 hours (4 snapshots + 87 deltas, ~335 changed
+  stations a poll).
+  - 0 failed, 0 dead letters; ack p50 47 ms, p95 63 ms.
+  - Partitions carried 15.6–18.3 % each.
+  - It corrected for the host clock, which was 92 s slow, from the feed's `Date` + `Age` headers.
+  - A recorded replay (15 Oct, 11:01–11:10, ×20) sent 4,341 messages in 25 s.
+- **P5.3 live scoring:**
+  - 2,457 of 2,546 stations carry their own live-window profile (411,672 profile rows); 14 / 14 districts matched.
+  - Rerunning the archetypes left all 4,811 A/B rows identical. Live features in 279 s.
+  - On the cluster (2 cores), every batch scores all 2,519 stations in 4–10 s. A typical evening batch: 322 empty
+    now + 80 forecast, 598 full now + 30 forecast, 40 moves.
+- **P5.4 replay:** 67,692 real trips (Thu 17 Sep, 16:00–20:00) at ×60 in 4 min.
+  - Append mode wrote 14 closed 15-minute windows; update mode rewrote each 60-minute window 5–12 times.
+  - Late trips: 1,318 sent, 823 still counted, 372 dropped by the watermark, the rest in windows still open.
+- **P5.5 gateway:** `/api/health` answers in 0.35 s (3 brokers, 2 workers, fresh snapshot).
+  - SSE delivers `hello`, live `alert`s and one `batch` summary per micro-batch.
+  - `/api/cluster` shows the topology and the `velograph-gateway` group at lag 0. 4 gateway tests.
+- **Gate B run** (32 min on the cluster, live feed):
+  - 58 micro-batches, 7,507 rows, 265 alerts, no query or batch failure.
+  - Broker → snapshot p50 22.0 s, **p95 37.5 s**, max 39.3 s.
+  - 4 Kafka read tasks timed out once after the broker drill and succeeded on Spark's retry.
+- **P5.6 broker drill:** broker 2 stopped for 120 s mid-stream.
+  - Its 5 partition leaders moved to broker 3 within 7 s, and every partition ran on 2 in-sync replicas.
+  - None was left without a leader. 352 deliveries, 0 failed; 4 batches ran meanwhile, at most 27.9 s latency.
+  - Back in sync 5.4 s after the restart. A repeat run measured 143 deliveries and 0 failed, back in 5.4 s, and
+    leaders handed back 5 / 5 / 5.
+- **P5.6 restart drill:** `kill -9` of the driver after batch 61 (end offset 38,030).
+  - The restarted job's batch 62 started at 38,030: no gap, no overlap.
+  - The bootstrap rebuilt 2,519 stations and their previous states before the first batch.
+- **Tests:** Scala 74/74, Python 29/29.
 🎓 Producer/consumer model · key → partition → ordering · consumer groups & offsets · acks, ISR, idempotence ·
 micro-batches & triggers · event vs processing time · watermarks · output modes · checkpoints & exactly-once.
 
@@ -332,8 +367,10 @@ Maximalist canvas, glass portals, neumorphic (clay) controls, hand-drawn ink ann
 - [ ] **P6.4 `/` Home** — night-time trip replay hero (deck.gl TripsLayer on one real evening), KPI band, scroll story
   of the pipeline whose chapters open the portals, ⌘K station search. _So far:_ two-column hero with the city of
   lights, KPI pucks, fact ticker, portal bento grid with the district sketch.
-- [ ] **P6.5 `/live` + `streaming` portal** — risk map with pulsing halos, alert ticker (SSE), KPIs, station drawer
-  (status, forecast, archetype, community, PageRank), suggested moves as arcs, live/replay toggle.
+- [x] **P6.5 `/live` + `streaming` portal** — risk map with pulsing halos, alert ticker (SSE), KPIs, station drawer
+  (status, forecast, archetype, community, PageRank), suggested moves as arcs, live/replay toggle. The status pill
+  shows live, replay or recorded; replay is chosen by starting the job with `--source replay`. The portal has 5
+  acts: producer, micro-batches and watermark, the live board, output modes and late data, and the drills.
 - [x] **P6.6 `/models` + `models` portal** — leaderboards vs baselines, confusion matrix, predicted vs actual,
   residuals, importances, ablation, archetype profiles + PCA, heat map. Built as the `models` portal
   (`/portal/models`, in the nav), with the leakage-safe windows timeline, the feature dictionary and the Scala ↔ lab

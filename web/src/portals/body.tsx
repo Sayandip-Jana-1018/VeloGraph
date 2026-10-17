@@ -1,6 +1,7 @@
 import {
   getDqReport,
   getInsightIndex,
+  getLiveSnapshot,
   getMlFeatures,
   getNetworkPregel,
   getNetworkSummary,
@@ -18,6 +19,7 @@ import { RddLabPortal } from "./rdd-lab/rdd-lab-portal";
 import type { PortalId } from "./registry";
 import { SparkUiPortal } from "./spark-ui/spark-ui-portal";
 import { SqlPortal } from "./sql/sql-portal";
+import { StreamingPortal } from "./streaming/streaming-portal";
 
 /** The body of each portal; the overlay and the full page render the same thing. */
 export function PortalBody({ id }: { id: PortalId }) {
@@ -38,6 +40,8 @@ export function PortalBody({ id }: { id: PortalId }) {
       return <GraphOpsPortal />;
     case "models":
       return <ModelsPortal />;
+    case "streaming":
+      return <StreamingPortal />;
   }
 }
 
@@ -59,5 +63,7 @@ export async function portalSource(id: PortalId): Promise<Meta | undefined> {
       return (await getSparkUi()).meta;
     case "models":
       return (await getMlFeatures()).meta;
+    case "streaming":
+      return (await getLiveSnapshot()).meta;
   }
 }

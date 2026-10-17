@@ -57,9 +57,10 @@ final case class ArchetypeReport(
 /**
  * Roadmap P4.1: station archetypes. Every station's hourly share profile (ArchetypeTransforms.profiles) is
  * clustered with KMeans for k in [k-min, k-max]; the k with the best silhouette wins. Clusters, names and the
- * 2-D PCA view are learned on profile-a only, then applied unchanged to profile-b. That keeps archetype ids
- * consistent across the fit and test rows, and keeps the test month out of everything (ARCHITECTURE §8.2).
- * Writes `gold/station_archetypes` and `serving/archetypes.json`.
+ * 2-D PCA view are learned on profile-a only, then applied unchanged to profile-b and to profile-l (the live
+ * features). That keeps archetype ids consistent across the fit, test and live rows, and keeps the test month
+ * out of everything the models learn from (ARCHITECTURE §8.2). Writes `gold/station_archetypes` and
+ * `serving/archetypes.json`.
  */
 object StationArchetypesJob extends SparkJob {
 
@@ -78,7 +79,7 @@ object StationArchetypesJob extends SparkJob {
     val panel = lake.read(LakeTable.StationHour)
 
     val learnOn  = ml.fit.profile // profile-a
-    val windows  = ml.splits.map(_.profile)
+    val windows  = (ml.splits :+ ml.live).map(_.profile)
     val profiles =
       windows.map(w =>
         w -> ArchetypeTransforms.profiles(panel, w, c.binHours).persist(StorageLevel.MEMORY_AND_DISK)
@@ -161,7 +162,7 @@ object StationArchetypesJob extends SparkJob {
       .select(LakeSchemas.GoldStationArchetype.fieldNames.map(col): _*)
     assigned.coalesce(1).write.mode(SaveMode.Overwrite).parquet(lake.uri(LakeTable.Archetypes))
 
-    // ---- Exports, from the written table (bounded: one row per station and window, ~5k).
+    // ---- Exports, from the written table (bounded: one row per station and window, ~7.5k).
     val written  = lake.read(LakeTable.Archetypes).persist(StorageLevel.MEMORY_AND_DISK)
     val inWindow = written.where(col("window") === learnOn.name)
     val counts   = inWindow
@@ -214,7 +215,10 @@ object StationArchetypesJob extends SparkJob {
       .where(col("window") === learnOn.name)
       .select(col("station_id"), col("archetype").as("a"))
       .join(
-        written.where(col("window") =!= learnOn.name).select(col("station_id"), col("archetype").as("b")),
+        written.where(col("window") === ml.test.profile.name).select(
+          col("station_id"),
+          col("archetype").as("b")
+        ),
         "station_id"
       )
       .agg(count(lit(1)), count(when(col("a") =!= col("b"), 1)))

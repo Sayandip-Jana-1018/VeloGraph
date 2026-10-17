@@ -630,3 +630,278 @@ export const ModelCards = envelope(
   ),
 );
 export type ModelCards = z.infer<typeof ModelCards>;
+
+// ---- P5: Kafka and Structured Streaming ----------------------------------------------------------------------
+export const RISKS = ["EMPTY", "EMPTY_RISK", "FULL", "FULL_RISK", "OK", "OFFLINE"] as const;
+export const Risk = z.enum(RISKS);
+export type Risk = z.infer<typeof Risk>;
+
+export const LiveStation = z.object({
+  id: z.string(),
+  name: z.string(),
+  lat: z.number(),
+  lon: z.number(),
+  capacity: z.number(),
+  bikes: z.number(),
+  ebikes: z.number(),
+  docks: z.number(),
+  projected: z.number(),
+  projectedDocks: z.number(),
+  dep60: z.number(),
+  arr60: z.number(),
+  net60: z.number(),
+  dep0: z.number(),
+  arr0: z.number(),
+  dep1: z.number(),
+  arr1: z.number(),
+  risk: Risk,
+  regime: z.number(),
+  archetype: z.string(),
+  community: z.number(),
+  pagerank: z.number(),
+  reported: z.number(),
+});
+export type LiveStation = z.infer<typeof LiveStation>;
+
+export const LiveMove = z.object({
+  from: z.string(),
+  fromName: z.string(),
+  fromLat: z.number(),
+  fromLon: z.number(),
+  to: z.string(),
+  toName: z.string(),
+  toLat: z.number(),
+  toLon: z.number(),
+  bikes: z.number(),
+  km: z.number(),
+  community: z.number(),
+});
+export type LiveMove = z.infer<typeof LiveMove>;
+
+export const LiveAlert = z.object({
+  at: z.string(),
+  stationId: z.string(),
+  name: z.string(),
+  risk: Risk,
+  previous: z.string(),
+  projected: z.number(),
+  capacity: z.number(),
+  lat: z.number(),
+  lon: z.number(),
+});
+export type LiveAlert = z.infer<typeof LiveAlert>;
+
+export const LiveSnapshotData = z.object({
+  asOf: z.string(),
+  asOfEpoch: z.number(),
+  source: z.enum(["live", "replay"]),
+  batchId: z.number(),
+  hour: z.string(),
+  fraction: z.number(),
+  weather: z.object({
+    hour: z.string(),
+    tempC: z.number(),
+    precipMm: z.number(),
+    windKmh: z.number(),
+    raining: z.boolean(),
+    observed: z.string(),
+    fallback: z.boolean(),
+  }),
+  kpis: z.object({
+    stations: z.number(),
+    reporting: z.number(),
+    offline: z.number(),
+    empty: z.number(),
+    emptyRisk: z.number(),
+    full: z.number(),
+    fullRisk: z.number(),
+    bikes: z.number(),
+    ebikes: z.number(),
+    docks: z.number(),
+    moves: z.number(),
+    bikesToMove: z.number(),
+  }),
+  latency: z.object({
+    brokerToSnapshotS: z.number(),
+    processingMs: z.number(),
+    batchRows: z.number(),
+    freshnessS: z.number(),
+  }),
+  stations: z.array(LiveStation),
+  moves: z.array(LiveMove),
+  alerts: z.array(LiveAlert),
+});
+export const LiveSnapshot = envelope(LiveSnapshotData);
+export type LiveSnapshot = z.infer<typeof LiveSnapshot>;
+
+export const ProgressEntry = z.object({
+  query: z.string(),
+  batchId: z.number(),
+  timestamp: z.string(),
+  inputRows: z.number(),
+  inputRowsPerSecond: z.number(),
+  processedRowsPerSecond: z.number(),
+  durationMs: z.record(z.string(), z.number()),
+  watermark: z.string().nullable(),
+  maxEventTime: z.string().nullable(),
+  stateRows: z.number(),
+  droppedByWatermark: z.number(),
+  stateMemoryBytes: z.number(),
+  scoring: z
+    .object({
+      stations: z.number(),
+      empty: z.number(),
+      emptyRisk: z.number(),
+      full: z.number(),
+      fullRisk: z.number(),
+      alerts: z.number(),
+      moves: z.number(),
+      latencyS: z.number(),
+      processingMs: z.number(),
+    })
+    .nullable(),
+});
+export type ProgressEntry = z.infer<typeof ProgressEntry>;
+
+export const StreamProgress = envelope(z.object({ queries: z.array(z.string()), batches: z.array(ProgressEntry) }));
+export type StreamProgress = z.infer<typeof StreamProgress>;
+
+export const ProducerStats = envelope(
+  z.object({
+    source: z.string(),
+    startedAt: z.string(),
+    counts: z.record(z.string(), z.number()),
+    delivered: z.number(),
+    failed: z.number(),
+    bytes: z.number(),
+    byPartition: z.array(z.object({ topic: z.string(), partition: z.number(), messages: z.number() })),
+    ackMs: z.object({ p50: z.number(), p95: z.number() }),
+    clockOffsetS: z.number().nullable(),
+    errors: z.record(z.string(), z.number()),
+  }),
+);
+export type ProducerStats = z.infer<typeof ProducerStats>;
+
+export const ReplayAnalytics = envelope(
+  z.object({
+    watermark: z.string(),
+    trigger: z.string(),
+    queries: z.array(
+      z.object({
+        name: z.string(),
+        outputMode: z.string(),
+        window: z.string(),
+        sink: z.string(),
+        batches: z.number(),
+        droppedByWatermark: z.number(),
+      }),
+    ),
+    late: z.object({ sent: z.number(), accepted: z.number(), droppedByWatermark: z.number(), rows: z.number() }),
+    maxEventTime: z.string().nullable(),
+    system: z.array(
+      z.object({
+        start: z.string(),
+        end: z.string(),
+        trips: z.number(),
+        member: z.number(),
+        casual: z.number(),
+        ebike: z.number(),
+        classic: z.number(),
+        late: z.number(),
+        updates: z.number(),
+      }),
+    ),
+    stations: z.array(
+      z.object({
+        start: z.string(),
+        end: z.string(),
+        stations: z.number(),
+        departures: z.number(),
+        late: z.number(),
+        top: z.array(
+          z.object({ station: z.string(), name: z.string(), departures: z.number(), ebike: z.number(), member: z.number() }),
+        ),
+      }),
+    ),
+    batches: z.array(
+      z.object({
+        query: z.string(),
+        batchId: z.number(),
+        timestamp: z.string(),
+        inputRows: z.number(),
+        watermark: z.string().nullable(),
+        stateRows: z.number(),
+        droppedByWatermark: z.number(),
+        durationMs: z.number(),
+      }),
+    ),
+  }),
+);
+export type ReplayAnalytics = z.infer<typeof ReplayAnalytics>;
+
+const DrillSample = z.object({
+  t: z.number(),
+  brokers: z.array(z.number()).optional(),
+  isr: z.record(z.string(), z.number()).optional(),
+  leaders: z.record(z.string(), z.number()).optional(),
+  leaderless: z.number().optional(),
+  delivered: z.number().nullable(),
+  failed: z.number().nullable(),
+  lastBatch: z.number().nullable(),
+  latencyS: z.number().nullable(),
+});
+export type DrillSample = z.infer<typeof DrillSample>;
+
+export const Drills = envelope(
+  z.object({
+    broker: z
+      .object({
+        broker: z.number(),
+        stoppedAt: z.string(),
+        restartedAt: z.string(),
+        downS: z.number(),
+        recoveredS: z.number().nullable(),
+        producerFailed: z.number(),
+        producerDelivered: z.number(),
+        batchesWhileDown: z.number(),
+        maxLatencyWhileDownS: z.number().nullable(),
+        leaderlessWhileDown: z.number(),
+        samples: z.array(DrillSample),
+        passed: z.boolean(),
+      })
+      .optional(),
+    restart: z
+      .object({
+        killedAt: z.string(),
+        restartedAt: z.string(),
+        lastCommitted: z.number(),
+        lastCommittedEnd: z.number(),
+        rerunBatches: z.array(z.number()),
+        firstAfterRestart: z.number().nullable(),
+        firstStart: z.number().nullable(),
+        firstEnd: z.number().nullable(),
+        batchesAfterRestart: z.number(),
+        offsetsWentBack: z.array(z.number()),
+        passed: z.boolean(),
+      })
+      .optional(),
+  }),
+);
+export type Drills = z.infer<typeof Drills>;
+
+export const LiveFeatures = envelope(
+  z.object({
+    profile: z.object({ from: z.string(), to: z.string() }),
+    live: z.object({ from: z.string(), to: z.string() }),
+    leakage: z.object({ split: z.string(), lastProfileDay: z.string(), firstRowDay: z.string(), passed: z.boolean() }),
+    stations: z.number(),
+    withProfile: z.number(),
+    profileRows: z.number(),
+    strongMinTrips: z.number(),
+    medianCapacity: z.number(),
+    communitiesMatched: z.number(),
+    communitiesNew: z.number(),
+    archetypes: z.array(z.object({ archetype: z.number(), name: z.string(), stations: z.number() })),
+  }),
+);
+export type LiveFeatures = z.infer<typeof LiveFeatures>;

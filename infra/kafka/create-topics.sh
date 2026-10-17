@@ -23,7 +23,9 @@ create() { # create <topic> <partitions> [--config key=value ...]
 }
 
 # Names use '.' between segments and '-' inside them, never '_': Kafka metric names treat '.' and '_' alike.
-create velograph.gbfs.station-status.v1 6 --config retention.ms=$DAY
+# Station status records carry the broker's append time rather than the producer's clock: the streaming job
+# measures feed -> snapshot latency against it, and the Windows host's clock can drift from the Docker VM's.
+create velograph.gbfs.station-status.v1 6 --config retention.ms=$DAY --config message.timestamp.type=LogAppendTime
 create velograph.weather.current.v1     1 --config cleanup.policy=compact --config segment.ms=$HOUR
 create velograph.trips.replay.v1        6 --config retention.ms=$((6 * HOUR))
 create velograph.trip-metrics.v1        3 --config retention.ms=$((6 * HOUR))
@@ -33,3 +35,9 @@ create velograph.dlq.v1                 1 --config retention.ms=$((7 * DAY))
 
 echo "topics:"
 "$BIN/kafka-topics.sh" --bootstrap-server "$BOOTSTRAP" --list
+
+# After a restart the broker that came back first leads every partition. Hand leadership back to each
+# partition's preferred replica, so reads and writes spread over all three brokers again.
+"$BIN/kafka-leader-election.sh" --bootstrap-server "$BOOTSTRAP" --election-type preferred \
+  --all-topic-partitions > /dev/null 2>&1 || true
+echo "preferred leaders elected"

@@ -498,3 +498,104 @@ either alone. That is CO6 measured inside CO4.
 It refits on August and must match the lab's September score within 1 %, or it fails. It matched to five decimals
 for all three models (departures MAE 1.45950, arrivals MAE 1.46738, regime macro-F1 0.51883), and saved them with
 model cards carrying their windows, parameters and git commit.
+
+## P5 · Kafka and Structured Streaming
+
+**Q68. Why are the station messages keyed by station id?**
+Kafka sends a message to a partition by hashing its key, so every update of one station lands in the same
+partition. Kafka keeps order only within a partition, so a station's updates arrive in the order they were sent.
+With 2,519 stations spread over 6 partitions, each partition carried 15.6–18.2 % of the messages, which also keeps
+the three brokers evenly loaded.
+
+**Q69. What do `acks=all`, `min.insync.replicas = 2` and idempotence each do?**
+- **`acks=all`:** the leader confirms a write only once every in-sync replica has it.
+- **`min.insync.replicas = 2`:** the write is refused if fewer than 2 replicas are in sync, so a confirmed message
+  always exists on at least two brokers.
+- **Idempotence:** the producer numbers its messages, so a retry after a lost acknowledgement does not write a
+  duplicate.
+
+In the drill, broker 2 was stopped for two minutes. Its partitions' leadership moved to broker 3 within 7 s, every
+partition ran on 2 replicas, and the producer had 352 deliveries and 0 failures.
+
+**Q70. What is a consumer group, and who keeps the offsets?**
+- **A consumer group** is a set of consumers that share a topic's partitions, each partition read by one member.
+  The gateway is the group `velograph-gateway` and commits its offsets to Kafka, so a restarted gateway resumes
+  where it stopped. `/api/cluster` shows its lag.
+- **Spark does not commit to Kafka.** It keeps the offsets of every micro-batch in its own checkpoint, next to the
+  state they produced, so the two can never disagree.
+
+**Q71. What is change data capture in your producer, and why send full snapshots too?**
+GBFS gives the whole station list every minute, but about 300 of 2,519 stations change between polls. The producer
+remembers each station's inventory and publishes only those that changed, about a seventh of the data. Every
+30 publishes it sends everything, so a consumer that starts later can rebuild every station from the last half
+hour of the log. That is exactly what the scoring job does on start.
+
+**Q72. What happens every 30 seconds in the scoring job?**
+The trigger fires and Spark plans a micro-batch:
+1. It writes the end offsets it will read to the checkpoint's offset log.
+2. It reads those records, drops duplicates within the watermark, and hands the batch to `foreachBatch`.
+3. Inside it, the driver merges the newest report of each station into its state, then builds the model rows for
+   this hour and the next.
+4. Three PipelineModels predict departures, arrivals and regime. The rules project the next 60 minutes and the
+   rebalancer plans moves.
+5. Predictions and alerts go to Kafka, the batch to Parquet, then the snapshot to disk.
+6. Spark commits the batch. A batch took 4–10 s on two cores.
+
+**Q73. Event time or processing time: which does the job use, and why?**
+- **Event time** is when something happened: here the station's `last_reported`. Watermarks and deduplication use
+  it, so a report sent twice (by a restarted producer, say) is recognised as the same event.
+- **Processing time** is when Spark sees the record. It is what latency is about.
+
+The broker stamps each record with its own append time, and the job measures latency from it. The laptop's clock
+was 92 s slow, and comparing two different clocks would have measured nothing.
+
+**Q74. What does the watermark do in `dropDuplicatesWithinWatermark`?**
+To drop a duplicate, Spark must remember every key it has seen, and without a limit that state grows forever. The
+watermark ("10 minutes behind the newest event time seen") tells Spark when it may forget a key. Any record older
+than the watermark is dropped as late. The state stayed at about 1,000–2,000 rows instead of growing.
+
+**Q75. Append and update mode: what is the difference, and where do you show it?**
+- **Append** writes a result row once, when it can no longer change. For a window, that is when the watermark
+  passes its end. The 15-minute station windows of the replay job reached Kafka only then.
+- **Update** writes a row every time it changes. The 60-minute sliding windows were rewritten 5 to 12 times as
+  trips arrived.
+
+Append needs a watermark for aggregations; complete mode (not used) would rewrite the whole result every time.
+
+**Q76. Your watermark is 15 minutes, yet trips 25 minutes late were still counted. Why?**
+In a windowed aggregation, Spark judges lateness by the window, not by the row. A row is dropped only when the
+watermark has already passed the end of the window it belongs to, because only then has that window's state been
+written and forgotten. A trip at 17:01 belongs to the 17:00–17:15 window. That window closes when the watermark
+passes 17:15, that is when trips of 17:30 have arrived. With 10 minutes of event time per trigger, it can come
+later still. In the replay, 1,318 trips were sent late:
+- 823 still counted;
+- 372 were dropped;
+- the rest waited in windows still open.
+
+**Q77. What happens if the driver is killed in the middle of a batch?**
+The offset log already holds that batch's offsets, but the commit log does not, so on restart Spark runs the same
+batch again with the same offsets. The sinks make that safe:
+- the Parquet file is written under the batch id and overwrites itself;
+- the snapshot is replaced as a whole;
+- Kafka predictions may appear twice (an at-least-once sink), and consumers can recognise them by station and time.
+
+The restart drill kills the driver with `kill -9`, restarts it, and checks the offset log: the first new batch must
+start where the last committed one ended.
+
+**Q78. The models predict whole hours. How do you get "the next 60 minutes"?**
+At minute m of the hour, f = m / 60 of the hour has passed. The next 60 minutes are the remaining (1 − f) of this
+hour and the first f of the next. So net flow = (1 − f) × (arrivals − departures)(this hour) +
+f × (arrivals − departures)(next hour), with each hour's weather taken from the forecast. Bikes now plus that net
+flow, kept between 0 and the docks, is the projection.
+
+**Q79. Why are the live features from 6 Aug to 30 Sep, not the eight weeks before today?**
+Citi Bike publishes a month's trip file only after the month ends, so on 17 October the last published trips are
+September's. The live window is the last eight weeks that exist. It is a leakage-safe window like the training ones,
+since it ends before the live rows start, and the job checks that on the data. GraphX reruns on it, and its
+districts take the fit window's ids, the numbering the models learned.
+
+**Q80. Why does the map show "empty now" and "empty within 60 minutes" separately?**
+On a Friday at 9 pm, 37 % of stations are already empty or full: the feed shows that without any model. What the
+models add is the stations that are fine now and will not be in an hour, for example 80 forecast to empty and
+34 to fill. One "at risk" flag would have hidden those among a thousand others. Solid dots are the feed and
+pulsing rings the forecast, and an alert fires only when a station enters the empty or the full group.

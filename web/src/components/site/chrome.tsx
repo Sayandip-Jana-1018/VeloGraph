@@ -10,6 +10,7 @@ const NAV = [
   { href: "/portal/pregel", label: "Pregel" },
   { href: "/portal/spark-ui", label: "Spark UI" },
   { href: "/portal/models", label: "Models" },
+  { href: "/live", label: "Live" },
 ];
 
 export function SiteHeader() {

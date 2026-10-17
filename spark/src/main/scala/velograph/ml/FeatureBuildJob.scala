@@ -9,7 +9,7 @@ import org.apache.spark.storage.StorageLevel
 
 import velograph.common.{JobContext, ServingJson, SourceRange, SparkJob}
 import velograph.etl.{LakeSchemas, LakeTable, LakeTables}
-import velograph.gold.{GoldConfig, RouteTransforms}
+import velograph.gold.{GoldConfig, PanelSpan, RouteTransforms}
 import velograph.graph.{GraphConfig, GraphFeatures, StrongEdgeRule}
 
 /** One entry of the feature dictionary (`serving/ml-features.json`); the labs select features by group. */
@@ -130,6 +130,36 @@ object FeatureBuildJob extends SparkJob {
   private def round(x: Double, digits: Int): Double = math.rint(x * math.pow(10, digits)) /
     math.pow(10, digits)
 
+  /** The median dock count of trip stations: the capacity of the few that GBFS no longer lists. */
+  def medianCapacity(stations: DataFrame): Int =
+    stations
+      .where(col("in_trips") && col("capacity").isNotNull)
+      .stat
+      .approxQuantile("capacity", Array(0.5), 0.0)
+      .head
+      .toInt
+
+  /** Capacity (the median where GBFS lists none, flagged), latitude and longitude. */
+  def stationAttributes(stations: DataFrame, medianCapacity: Int): DataFrame =
+    stations.select(
+      col("station_id"),
+      coalesce(col("capacity"), lit(medianCapacity)).as("capacity"),
+      col("capacity").isNotNull.as("capacity_known"),
+      col("lat"),
+      col("lon")
+    )
+
+  /**
+   * Strong ties are "at least N trips"; N is set for the four-month graph, so it is scaled to each window.
+   */
+  def strongRule(graph: GraphConfig, span: PanelSpan, w: DateWindow): StrongEdgeRule = {
+    val panelDays = ChronoUnit.DAYS.between(LocalDate.parse(span.from), LocalDate.parse(span.to)) + 1
+    StrongEdgeRule(
+      math.max(1L, math.round(graph.strong.minTrips.toDouble * w.days / panelDays)),
+      graph.strong.topK
+    )
+  }
+
   def run(ctx: JobContext, args: Seq[String]): Map[String, Any] = {
     val spark = ctx.spark
     import spark.implicits._
@@ -145,30 +175,9 @@ object FeatureBuildJob extends SparkJob {
     val calendar   = lake.read(LakeTable.Calendar)
     val archetypes = lake.read(LakeTable.Archetypes)
 
-    // Station attributes. The few trip stations GBFS no longer lists get the median capacity, flagged.
-    val medianCapacity = stations
-      .where(col("in_trips") && col("capacity").isNotNull)
-      .stat
-      .approxQuantile("capacity", Array(0.5), 0.0)
-      .head
-      .toInt
-    val stationAttrs = stations
-      .where(col("in_trips"))
-      .select(
-        col("station_id"),
-        coalesce(col("capacity"), lit(medianCapacity)).as("capacity"),
-        col("capacity").isNotNull.as("capacity_known"),
-        col("lat"),
-        col("lon")
-      )
-
-    // Strong ties are "at least N trips"; N is set for the four-month graph, so it is scaled to each window.
-    val panelDays = ChronoUnit.DAYS.between(LocalDate.parse(span.from), LocalDate.parse(span.to)) + 1
-    def strongRule(w: DateWindow) =
-      StrongEdgeRule(
-        math.max(1L, math.round(graphCfg.strong.minTrips.toDouble * w.days / panelDays)),
-        graphCfg.strong.topK
-      )
+    val median                    = medianCapacity(stations)
+    val stationAttrs              = stationAttributes(stations.where(col("in_trips")), median)
+    def strongRule(w: DateWindow) = FeatureBuildJob.strongRule(graphCfg, span, w)
 
     def build(split: FeatureWindow): Built = {
       val w = split.profile
@@ -318,7 +327,7 @@ object FeatureBuildJob extends SparkJob {
       tau = round(tau, 5),
       tauQuantile = ml.regimeQuantile,
       strongMinTrips = strongRule(ml.fit.profile).minTrips,
-      medianCapacity = medianCapacity,
+      medianCapacity = median,
       communitiesMatched = matched,
       communitiesNew = fresh,
       leakage = built.map(_.check),
