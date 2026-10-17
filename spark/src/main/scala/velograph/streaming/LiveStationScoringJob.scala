@@ -1,6 +1,6 @@
 package velograph.streaming
 
-import java.time.{Instant, LocalDate, ZonedDateTime, ZoneId}
+import java.time.{Duration, Instant, LocalDate, ZonedDateTime, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
@@ -203,7 +203,7 @@ final class LiveScorer(
   /**
    * Rebuilds every station's state from the last `bootstrap-minutes` of the topic (a batch read, by broker
    * timestamp), so a (re)started job need not wait for the producer's next full snapshot. The risks of the
-   * last snapshot come back too, so a restart does not repeat alerts that were already sent.
+   * last snapshot come back too, if it is recent, so a restart does not repeat alerts that were already sent.
    */
   def bootstrap(): Unit = {
     val since  = System.currentTimeMillis() - live.bootstrapMinutes * 60000L
@@ -218,15 +218,22 @@ final class LiveScorer(
       .transform(LiveTransforms.parse)
       .where(col("valid") && col("source") === source)
     merge(newestStatuses(recent).toSeq)
-    previousRisk = Try {
-      val data = mapper.readTree(snapshotPath.toFile).path("data")
-      if (data.path("source").asText() != source) Map.empty[String, String]
-      else data.path("stations").elements().asScala.map(s =>
-        s.path("id").asText() -> s.path("risk").asText()
-      ).toMap
-    }.getOrElse(Map.empty)
+    val snapshot = Try(mapper.readTree(snapshotPath.toFile)).toOption
+    val age = snapshot.flatMap(s => Try(Instant.parse(s.path("meta").path("generatedAt").asText())).toOption)
+      .map(Duration.between(_, Instant.now()))
+    previousRisk = snapshot.map(_.path("data")) match {
+      case Some(data)
+          if data.path("source").asText() == source &&
+            age.exists(LiveRules.resumable(_, live.bootstrapMinutes)) =>
+        data.path("stations").elements().asScala.map(s =>
+          s.path("id").asText() -> s.path("risk").asText()
+        ).toMap
+      case _ => Map.empty
+    }
+    val resumed = age.fold("no snapshot")(a => s"snapshot ${a.toMinutes} min old")
     log.info(
-      s"bootstrap: ${state.size} stations from the last ${live.bootstrapMinutes} min, ${previousRisk.size} previous risks"
+      s"bootstrap: ${state.size} stations from the last ${live.bootstrapMinutes} min, " +
+        s"${previousRisk.size} previous risks ($resumed)"
     )
   }
 

@@ -494,7 +494,9 @@ every minute.
    - `LiveRules`: net flow over the next 60 minutes = (1 − f)·net̂(h₀) + f·net̂(h₀ + 1), projected bikes and docks,
      and one of six states against a margin of max(2, 10 % of the docks): EMPTY / FULL now, EMPTY_RISK / FULL_RISK
      within 60 minutes, OK, OFFLINE;
-   - alerts when a station enters the empty or the full family (not on the first batch);
+   - alerts when a station enters the empty or the full family. A first batch has nothing to compare with and
+     sends none, unless the job restarts from a snapshot under 35 minutes old, whose risks it reads back (an
+     older one belongs to another run);
    - `Rebalancer`: one GraphX district at a time, neediest first by expected departures, donors in the same
      district (full stations first, then nearest), ≤ 2.5 km, ≤ 12 bikes a move, ≤ 40 moves;
    - sinks: Kafka predictions (every station) and alerts, Parquet `stream/predictions`, then

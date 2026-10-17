@@ -1,5 +1,7 @@
 package velograph.streaming
 
+import java.time.Duration
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class LiveRulesSpec extends AnyFunSuite {
@@ -181,5 +183,15 @@ class LiveRulesSpec extends AnyFunSuite {
   test("haversine distance") {
     // Times Square to Grand Central: about 0.9 km.
     assert(math.abs(Rebalancer.haversineKm(40.7580, -73.9855, 40.7527, -73.9772) - 0.92) < 0.05)
+  }
+
+  test("a restart resumes the last snapshot's risks only while that snapshot is recent") {
+    assert(LiveRules.resumable(Duration.ofMinutes(2), windowMinutes = 35))
+    assert(LiveRules.resumable(
+      Duration.ofSeconds(-92),
+      windowMinutes = 35
+    )) // a cluster snapshot read on the host's slow clock
+    assert(!LiveRules.resumable(Duration.ofHours(8), windowMinutes = 35))
+    assert(!LiveRules.resumable(Duration.ofMinutes(35), windowMinutes = 35))
   }
 }
