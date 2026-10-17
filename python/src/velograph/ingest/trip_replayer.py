@@ -15,8 +15,8 @@ dropped and counted. Messages say ``"source": "replay"``; late ones carry ``late
 
 from __future__ import annotations
 
+import hashlib
 import logging
-import random
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -92,16 +92,24 @@ def read_trips(partition: Path, start: datetime, until: datetime) -> list[Trip]:
     return trips
 
 
+def _draw(seed: int, ride_id: str, purpose: str) -> float:
+    """A number in [0, 1) fixed by the seed and the ride: a hash, so the trips' order does not matter."""
+    digest = hashlib.blake2b(f"{seed}:{purpose}:{ride_id}".encode(), digest_size=8).digest()
+    return int.from_bytes(digest, "big") / 2**64
+
+
 def schedule(
     trips: list[Trip], *, late_share: float, late_min: float, late_max: float, seed: int
 ) -> list[Scheduled]:
-    """When each trip is sent, in event-time seconds: at its start, or later for the chosen late share."""
-    # Seeded on purpose, so every run delays the same trips: a reproducible simulation, not a security use.
-    rng = random.Random(seed)  # NOSONAR
+    """When each trip is sent, in event-time seconds: at its start, or later for the chosen late share.
+
+    Which trips are late, and by how much, depends only on the seed and each ride id, so every run, in any
+    order it reads the trips, delays exactly the same ones.
+    """
     out = []
     for t in trips:
-        late = rng.random() < late_share
-        delay = rng.uniform(late_min, late_max) * 60 if late else 0.0
+        late = _draw(seed, t.ride_id, "late") < late_share
+        delay = (late_min + (late_max - late_min) * _draw(seed, t.ride_id, "delay")) * 60 if late else 0.0
         out.append(Scheduled(t.started_at + delay, t, delay))
     out.sort(key=lambda s: (s.send_at, s.trip.ride_id))
     return out

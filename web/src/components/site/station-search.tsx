@@ -337,6 +337,7 @@ export function StationSearch() {
                     aria-selected={i === active}
                     onMouseEnter={() => setActive(i)}
                     onClick={() => choose(s)}
+                    onKeyDown={(e) => e.key === "Enter" && choose(s)}
                     className={cn(
                       "flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2.5",
                       i === active ? "bg-white/8" : "hover:bg-white/5",
