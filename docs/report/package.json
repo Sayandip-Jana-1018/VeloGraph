@@ -1,0 +1,12 @@
+{
+  "name": "velograph-report",
+  "private": true,
+  "description": "Builds the project report (Word, then PDF through Word) from the serving exports and the evidence screenshots.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "docx": "9.8.1"
+  }
+}

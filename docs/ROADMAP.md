@@ -473,33 +473,104 @@ polling · IntersectionObserver vs scroll handlers · compositor-only animation 
 
 ### P7 · Hardening & automation — D8
 
-- [ ] **P7.1 One-command flows** — `pipeline.ps1` (all batch stages with timings), `demo.ps1` (cluster, topics,
+- [x] **P7.1 One-command flows** — `pipeline.ps1` (all batch stages with timings), `demo.ps1` (cluster, topics,
   producer, streaming, gateway, web; prints URLs), `sync-web-data.ps1`.
-- [ ] **P7.2 Tests green** — Scala, Python, export contracts, web typecheck + build.
-- [ ] **P7.3 Docs** — README (quick start, architecture, screenshots) + `docs/RUNBOOK.md` (OOM, ports, winutils, Docker,
+- [x] **P7.2 Tests green** — Scala, Python, export contracts, web typecheck + build.
+- [x] **P7.3 Docs** — README (quick start, architecture, screenshots) + `docs/RUNBOOK.md` (OOM, ports, winutils, Docker,
   Kafka).
-- [ ] **P7.4 Live backtest** — projected vs actual availability from the recordings → `live-backtest.json` (MAE in
+- [x] **P7.4 Live backtest** — projected vs actual availability from the recordings → `live-backtest.json` (MAE in
   bikes, hit rate of empty-risk alerts).
-- [ ] **P7.5 Evidence pack** — screenshots (UI, Spark UI, history server, Kafka UI) + benchmark table (local vs
+- [x] **P7.5 Evidence pack** — screenshots (UI, Spark UI, history server, Kafka UI) + benchmark table (local vs
   cluster, cache effects).
 
-**Acceptance:** from a fresh terminal, `demo.ps1` reaches a working Live page in < 5 min.
-**Evidence:** _pending_
+**Acceptance:** from a fresh terminal, `demo.ps1` reaches a working Live page in < 5 min. **Met: 73 s.**
+**Evidence (17–18 Oct):**
+- **One-command flows:**
+  - `demo.ps1` starts the containers and waits for their health checks and the topic bootstrap. It then starts the
+    producer, the scoring job on the cluster, the gateway and the website. The gateway served the run's first
+    micro-batch 73 s after the start, with Docker already running.
+  - `pipeline.ps1` on 17 Oct: 16 steps (15 Spark jobs and the web sync) in 50.9 min, with a per-step table and a
+    log in `data/logs/`. The longest steps were train-champion (12.7 min) and feature-build (10.6 min).
+  - The rerun changed only timings: every row count, graph metric and model metric came out identical.
+  - `sync-web-data.ps1` wraps `pnpm sync`; `benchmark.ps1` runs the RDD lab on the cluster beside the laptop run.
+- **Tests:** Scala 77 / 77 (ScalaTest on a local session); Python 30 / 30, ruff clean.
+  - `validate_exports.py`: 63 exports, all 24 the website loads present, 0 broken.
+  - The web app's `typecheck`, `lint` and `build` pass; SonarCloud's quality gate passes.
+- **Docs:** the README (what it does, quick start, architecture, screenshots) and `docs/RUNBOOK.md` (ports, memory,
+  Windows quirks, failures).
+- **Live backtest** (`live-backtest.json`): 156,902 predictions from 16 Oct 21:47 to 17 Oct 10:25, New York time.
+  Each is checked against the recorded feed 60 min later, and counts only if the recorder polled within 3 min of its
+  target.
+  - Bikes: MAE 1.41 against 1.33 for "no change" (5.8 % worse). At stations flagged FULL_RISK, 1.72 against 2.14.
+  - Risk calls: EMPTY_RISK came true 89.8 % of the time (4,667 / 5,200) and FULL_RISK 85.5 % (1,609 / 1,882).
+  - Base rate: of stations rated OK, sampled one in ten (9,442), 6.4 % emptied and 11.2 % filled.
+  - Shown as act 6 of the `streaming` portal.
+- **Gateway resilience:** after the fixes, four pollers got a 200 on every request through a 45 s broker outage. The
+  fixes: one admin request at a time, a 5 s cache, `{ok: false}` for a failing probe, and a restart loop.
+- **Evidence pack:** 25 screenshots in `docs/assets/evidence/`: the website, the Spark master, the scoring job's Spark
+  UI and its Structured Streaming tab, and Kafka UI.
+  - All 25 were retaken on 18 Oct, after the pipeline rerun, with the live stack running and each page in one of the
+    site's six colour themes.
+  - The run's live exports were put back afterwards, so the report keeps the 31-minute run.
+  - Two console captures join them: the model evaluation and the training run's check against the notebooks.
+- **Model evaluation** (`evaluate-champions`, 29 s): the saved champions, scored on 1,717,896 September station-hours.
+  - Departures: MAE 1.464 against 1.562 for seasonal naive.
+  - Arrivals: MAE 1.476 against 1.566.
+  - Regime: macro-F1 0.519 and accuracy 0.659. Always predicting the majority class scores accuracy 0.736 but macro-F1
+    0.283.
+  - The 17 Oct rerun of TrainChampionJob came within 0.6 % of the notebooks (+0.29 %, +0.57 %, +0.05 %); at P4 it
+    was exact.
+- **Benchmark** (`benchmark.ps1` → `serving/benchmarks/`; act 7 of the `rdd-lab` portal): the RDD lab on
+  4,979,938 September trips, run on the laptop and on the Docker cluster.
+
+  | Step | Laptop, `local[20]` | Docker cluster, 2 workers × 2 cores |
+  |---|---|---|
+  | Whole job | 67.5 s | 99.0 s |
+  | groupByKey / reduceByKey | 5.3 s / 1.8 s | 2.8 s / 1.4 s |
+  | Shuffle join / broadcast join | 5.0 s / 0.8 s | 3.3 s / 1.1 s |
+  | Recount, not cached | 2.1 s | 6.3 s |
+  | Recount, MEMORY_ONLY | 74 ms (1,332 MB cached) | 4.2 s (only 497 MB fitted) |
+  | Recount, MEMORY_ONLY_SER | 765 ms (397 MB) | 538 ms (397 MB) |
+  | Recount, DISK_ONLY | 575 ms | 579 ms |
+
+  Both runs give the same counts and the same shuffle bytes, to the byte.
+
+🎓 Idempotent, deterministic reruns (fixed seeds, overwrite semantics) · storage levels on a memory-starved cluster:
+partial caching and recomputation from lineage · a backtest, and why "no change" is the forecast to beat · window
+frames: `rowsBetween` vs `rangeBetween` · health checks and readiness in a start script.
 
 ### P8 · Report, slides, viva — D9 → Gate D
 
-- [ ] **P8.1 Report** (25–30 pp): abstract · introduction & objectives · background (Spark vs Hadoop/MapReduce,
+- [x] **P8.1 Report** (25–30 pp): abstract · introduction & objectives · background (Spark vs Hadoop/MapReduce,
   bike-share rebalancing) · dataset · architecture · methodology (ETL, SQL, GraphX, MLlib, streaming) · results ·
   syllabus/CO mapping · challenges & lessons · conclusion & future work · references · appendix (runbook,
   screenshots). Tool and format agreed with you at the start of P8.
-- [ ] **P8.2 Slides** (12–15) aligned with the demo script.
-- [ ] **P8.3 Viva kit** — ≥ 80 Q&A (Units I–VI + design "why" questions), one-page cheat sheet, `scala-tour.md` (each
+- [x] **P8.2 Slides** (12–15) aligned with the demo script.
+- [x] **P8.3 Viva kit** — ≥ 80 Q&A (Units I–VI + design "why" questions), one-page cheat sheet, `scala-tour.md` (each
   Unit II concept → a real line of our code).
-- [ ] **P8.4 Backup demo video** (3–4 min screen recording) in case the live demo fails.
+- [x] **P8.4 Backup demo video** (3–4 min screen recording) in case the live demo fails.
 - [ ] **P8.5 Rehearsals** — two timed runs; viva-day checklist.
 
 **Gate D:** you can run the demo end-to-end alone and answer 20 random questions from the bank.
-**Evidence:** _pending_
+**Evidence (17–18 Oct):**
+- **Report:** `docs/report/build.mjs` builds it from the exports, and `export.ps1` updates its fields in Word and
+  saves the PDF. Every number is read from `data/serving`. The output is `submission/VeloGraph-Report.docx` and
+  `.pdf`, 31 pages:
+  - a cover with the LPU logo and the course details;
+  - two opening pages of ten screenshots in six colour themes;
+  - a declaration, certificate, acknowledgement, abstract and contents;
+  - 9 chapters, 16 references and 2 appendices, with 22 figures and 11 tables, including the model evaluation's
+    console output.
+  - Chapters flow on without forced page breaks. `docs/report/layout.py` measures the PDF and narrows any figure
+    that would leave an empty band at the bottom of a page.
+- **Slides:** a 17-slide deck, a Slides artifact that downloads as PowerPoint or PDF. One slide is the real model
+  evaluation run. It follows the demo script,
+  uses the evidence screenshots, and has speaker notes on every slide that double as viva answers.
+- **Viva kit:** 95 questions in `docs/viva/qa-bank.md`, a one-page `docs/viva/cheat-sheet.md`, and
+  `docs/viva/scala-tour.md` (14 Unit II concepts, each with a real excerpt and its line).
+- **Backup video:** `submission/VeloGraph-demo.webm`, 3:58, recorded by `velograph.ops.demo_video` against the live
+  system, including a broker drill.
+- **Left for you:** P8.5, two timed rehearsals, and the upload to the university portal.
 
 ---
 
@@ -556,8 +627,8 @@ classification leaderboards with baselines and confusion matrix · report, slide
 
 ## 9. Submission checklist — Sat 24 Oct
 
-- [ ] Source code (Git repo or zip, without `data/`) with README run instructions
-- [ ] Report (PDF)
-- [ ] Slides
-- [ ] Backup demo video
+- [x] Source code (Git repo or zip, without `data/`) with README run instructions
+- [x] Report (PDF)
+- [x] Slides
+- [x] Backup demo video
 - [ ] Final rehearsal done

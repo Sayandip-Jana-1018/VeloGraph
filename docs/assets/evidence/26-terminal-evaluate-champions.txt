@@ -1,0 +1,32 @@
+PS C:\Users\Sayan\Desktop\int315> . '.\scripts\env.ps1'; & '.\scripts\submit.ps1' evaluate-champions -DriverMemory 6g
+VeloGraph environment (this session only) - root C:\Users\Sayan\Desktop\int315
+  [ok]      JDK 17 (JAVA_HOME)   C:\Users\Sayan\.jdks\temurin-17\bin\java.exe
+  [ok]      sbt                  C:\Users\Sayan\.local\sbt-1.12.15\bin\sbt.bat
+  [ok]      Spark (SPARK_HOME)   C:\spark\bin\spark-submit.cmd
+  [ok]      winutils             C:\hadoopsetup\hadoop-3.2.4\bin\winutils.exe
+  [ok]      Python venv          C:\Users\Sayan\Desktop\int315\python\.venv\Scripts\python.exe
+08:07:18 INFO  EvaluateChampionsJob - evaluate-champions starting: mode=dev master=local[20] app=local-1792291037437 data=C:\Users\Sayan\Desktop\int315\data
+08:07:22 WARN  SparkStringUtils - Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+
+VeloGraph champion models on the test month, 2026-09-01 to 2026-09-30: 1,717,896 station-hours
+
+Next-hour target Model                MAE    RMSE      R2   Seasonal naive MAE Better by
+arrivals         gbt                1.476   3.249   0.702   1.566                   5.7 %
+departures       random-forest      1.464   2.997   0.744   1.562                   6.3 %
+
+Regime over the next hour (draining, stable, filling): linear-svc-ovr
+  accuracy 0.659   macro-F1 0.519      always the majority class: accuracy 0.736, macro-F1 0.283
+
+  Class       Precision   Recall      F1    Support
+  draining        0.322    0.467   0.381    227,417
+  stable          0.864    0.728   0.791  1,264,549
+  filling         0.328    0.468   0.386    225,930
+
+  Actual \ predicted     draining     stable    filling
+  draining                106,136     71,543     49,738
+  stable                  176,207    920,988    167,354
+  filling                  47,226     72,890    105,814
+
+08:07:47 INFO  EvaluateChampionsJob - evaluate-champions succeeded in 28679 ms; report written to C:\Users\Sayan\Desktop\int315\data\serving\jobs\evaluate-champions.json
+08:07:47 INFO  SparkUI - Stopped Spark web UI at http://127.0.0.1:4050
+PS C:\Users\Sayan\Desktop\int315>

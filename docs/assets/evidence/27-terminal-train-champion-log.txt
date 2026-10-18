@@ -1,0 +1,9 @@
+PS C:\Users\Sayan\Desktop\int315> Select-String -Path 'data\logs\pipeline-20261017-220112.log' -Pattern 'TrainChampionJob'
+
+data\logs\pipeline-20261017-220112.log:243:22:32:11 INFO  TrainChampionJob - train-champion starting: mode=dev master=local[20] app=local-1792256530212 data=C:\Users\Sayan\Desktop\int315\data
+data\logs\pipeline-20261017-220112.log:402:22:39:23 INFO  TrainChampionJob - arrivals: gbt mae 1.47569 against the lab's 1.46738 (+0.57 %) in 400518 ms
+data\logs\pipeline-20261017-220112.log:409:22:41:54 INFO  TrainChampionJob - departures: random-forest mae 1.46375 against the lab's 1.45950 (+0.29 %) in 122515 ms
+data\logs\pipeline-20261017-220112.log:410:22:44:42 INFO  TrainChampionJob - regime: linear-svc-ovr macroF1 0.51909 against the lab's 0.51883 (+0.05 %) in 146801 ms
+data\logs\pipeline-20261017-220112.log:411:22:44:45 INFO  TrainChampionJob - train-champion succeeded in 753928 ms; report written to C:\Users\Sayan\Desktop\int315\data\serving\jobs\train-champion.json
+
+PS C:\Users\Sayan\Desktop\int315>

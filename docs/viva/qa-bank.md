@@ -495,9 +495,14 @@ either alone. That is CO6 measured inside CO4.
 - the same input splits: the lab ran local[16], so the job pins `spark.sql.files.minPartitionNum = 16`, because
   forests sample per partition.
 
-It refits on August and must match the lab's September score within 1 %, or it fails. It matched to five decimals
-for all three models (departures MAE 1.45950, arrivals MAE 1.46738, regime macro-F1 0.51883), and saved them with
-model cards carrying their windows, parameters and git commit.
+It refits on August and must match the lab's September score within 1 %, or it fails. On 16 Oct it matched to five
+decimals for all three models (departures MAE 1.45950, arrivals MAE 1.46738, regime macro-F1 0.51883), and saved
+them with model cards carrying their windows, parameters and git commit.
+
+The full pipeline rerun on 17 Oct rebuilt the feature table, but the notebooks were not rerun. The retrained models
+then came within 0.6 % of the notebooks: departures +0.29 %, arrivals +0.57 %, regime +0.05 %. That is inside the
+gate, and the likely reason is that forests and boosted trees draw their samples per input partition.
+`evaluate-champions` prints what the saved models score today.
 
 ## P5 · Kafka and Structured Streaming
 
@@ -667,3 +672,67 @@ It was measured, not eyeballed, on the production build with the gateway down:
   below 1024 px.
 - **Reduced motion:** counters and reveals render the same on the server and in the browser, the hero shows one
   still minute, and smooth scrolling is off.
+
+## P7 · Hardening: one-command flows, backtest, resilience
+
+**Q89. How do you know the live forecasts are any good?**
+The live backtest (`LiveBacktestJob`) checks every stored prediction against what the GBFS recorder saw an hour
+later: 156,902 predictions in all.
+- **Bike counts:** the projected counts are off by 1.41 bikes, and "nothing changes" by 1.33. Over one hour most
+  stations barely move, so the projection itself does not beat "no change".
+- **Risk calls:** 90 % of "empties soon" calls came true, against 6.4 % of stations called fine, a 14-fold
+  difference. The alerts point at the right stations.
+
+Part of that comes from flagged stations already being near their margin, and I report it that way.
+
+**Q90. How is "the bikes an hour later" found in Spark without a UDF?**
+- **Timeline:** readings and prediction targets go into one timeline per station, with a union.
+- **Bikes at the target:** a window ordered by time takes the last reading at or before each target
+  (`last(..., ignoreNulls)` over `rowsBetween(unboundedPreceding, currentRow)`).
+- **The hour's low point:** a second window with `rangeBetween(-3599, 0)` gives the fewest bikes in that hour.
+- **Recorder gaps:** a prediction counts only if the recorder polled in the three minutes before its target.
+
+**Q91. What does `demo.ps1` do, and how long does it take?**
+- **What it starts:** the Docker cluster (Kafka ×3 with the topic bootstrap, the Spark master and two workers),
+  then the producer, the live scoring job on the cluster, the gateway and the website, all windowless.
+- **When it returns:** once the gateway serves a micro-batch of this run, 73 s from a running Docker in testing.
+- **Stopping:** `-Stop` stops everything gracefully through stop files.
+
+**Q92. What went wrong in the resilience drills, and what did you change?**
+- **What failed:** the stream survived every broker drill, but the gateway twice died with a native crash
+  (exit 139, an access violation in the Kafka client library) when a broker went down while admin requests
+  overlapped.
+- **The changes:** the gateway now makes one admin request at a time, reuses a reading for 5 s, turns a failing
+  probe into `{"ok": false}`, and runs under a restart loop.
+- **The proof:** four pollers through a 45-second outage then got a 200 on every request.
+
+**Q93. Was the Spark cluster faster than the laptop?**
+No, and that is the lesson. The same RDD lab took 67.5 s on the laptop in local mode (20 threads in one JVM) and
+99 s on the Docker cluster (two workers with 2 cores each, inside a 6 GB VM). The answers matched to the byte.
+- **Memory:** on the cluster, MEMORY_ONLY could cache only 497 MB of the 1,332 MB of objects. So the "cached"
+  recount recomputed most partitions from lineage: 4.2 s, against 74 ms on the laptop.
+- **Serialized storage:** MEMORY_ONLY_SER fits the whole RDD in 397 MB, and its recount took 538 ms. On a small
+  cluster it is the right storage level.
+- **Cores and files:** 4 cores against 20 threads, and the files are read through Docker's file sharing.
+
+A cluster pays off when the data no longer fits one machine. Until then, its scheduling and network cost make local
+mode faster.
+
+**Q94. If you run the pipeline twice, do you get the same numbers?**
+The same data and models, yes; the same timings, no. The rerun on 17 Oct changed only timings, and every row count,
+graph metric and model metric came out identical. Four things make it so:
+- every random step has a fixed seed (samples, KMeans, the forests);
+- the splits are by time, not random;
+- ties break the same way every time (the smallest label wins);
+- writes overwrite (dynamic partition overwrite), so a rerun replaces data instead of appending it.
+
+**Q95. Your classifier's accuracy is 0.659, but always guessing "stable" gets 0.736. Is the model worse?**
+No. Accuracy misleads when the classes are unbalanced: 74 % of September's station-hours are stable.
+- **Always "stable":** it never finds a draining or filling station, so its F1 for those classes is 0. Its macro-F1,
+  the mean F1 over the three classes, is 0.283.
+- **The model:** it is trained with class weights, so each class counts equally. It finds 47 % of the draining and of
+  the filling station-hours (recall 0.467 and 0.468), at a macro-F1 of 0.519.
+- **The price:** precision. About one in three of its draining or filling calls is right (0.32), which the confusion
+  matrix in `evaluate-champions` shows.
+
+For an operator who wants the stations that will drain, finding half of them beats finding none.

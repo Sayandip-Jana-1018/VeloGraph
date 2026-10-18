@@ -311,6 +311,8 @@ and out, Spark app id), which feeds the pipeline timeline and the report's bench
 | *ML Lab (PySpark notebooks)* | gold.ml_features → leaderboards, ablation, heat map | see §8 | U6, CO4 |
 | LiveFeaturesJob | gold + silver trips + archetypes + ml_features → gold.live_stations, gold.live_profiles, `live-features.json` | GraphX per window, community alignment, data-level leakage check for the live window | CO4, CO6 |
 | TrainChampionJob | gold.ml_features → `models/*`, `model-cards.json` | the lab's Pipeline rebuilt in Scala, typed params from config, PipelineModel persistence, parity check against the lab (±1 %) | CO4 |
+| EvaluateChampionsJob | `models/*` + gold.ml_features (test split) → console report, `model-evaluation.json` | `PipelineModel.load` of the saved champions, MAE/RMSE/R² against the seasonal naive forecast, accuracy, macro-F1, per-class metrics and the confusion matrix against the majority class | CO4 |
+| LiveBacktestJob | stream/predictions + raw/gbfs_recordings → `live-backtest.json` | a union of readings and prediction targets per station; `last(ignoreNulls)` over `rowsBetween` for the bikes at the target, `rangeBetween` for the hour's low point; a coverage join on poll minutes | CO4, CO5 |
 | HeroTripsJob | silver.trips + silver.stations → `hero-trips.json` | `sequence` + `explode` for the rides under way per minute, a repeatable sample by `pmod(xxhash64(ride_id), 5)`, bounded collects | CO5 |
 
 ## 7. Graph analytics (GraphX)
@@ -528,6 +530,16 @@ share the 4-core cluster.
 - A killed driver resumes from its checkpoint (`velograph.ops.drills restart`): the drill compares Spark's offset
   log before the `kill -9` and after the restart, and passes only if the first new batch starts where the last
   committed one ended.
+- **The gateway survives a broker outage.** During two drills it had died with a native crash (exit 139) in its
+  Kafka admin client, when overlapping requests met a broker going down. Three measures followed:
+  - it now sends one admin request at a time and reuses a reading for 5 s;
+  - a failing probe becomes `{"ok": false}` instead of a 500;
+  - `scripts/demo.ps1` runs it in a restart loop.
+
+  Four pollers through a 45-second outage then got a 200 on every request.
+- **Live backtest** (`LiveBacktestJob`, P7.4): every stored prediction is checked against what the GBFS recorder saw
+  60 minutes later. A prediction counts only when the recorder polled in the three minutes before its target, and
+  reading times are the feed's own `last_updated`, so the host's slow clock plays no part.
 
 ## 10. Serving layer & contracts
 
@@ -537,15 +549,18 @@ portals quote).
 
 | File | Producer | Page |
 |---|---|---|
+| `live-backtest.json` (projected against recorded bikes 60 min later, error against no change, and how often each risk call came true, with a sampled base rate for OK stations) | LiveBacktestJob | `streaming` portal |
 | `hero-trips.json` (one real evening: its stations, one trip in five, and the rides under way per minute counted from all of them) | HeroTripsJob | Home hero |
 | `station-index.json` (one row per station: name, position, docks, PageRank rank, district, archetype, trips out and in, AM/PM shift) | `pnpm sync`, from `network-nodes.json` and `archetypes.json` | ⌘K station search |
 | `insights/<id>.json`, `insights/index.json` | InsightsJob | Insights |
 | `rdd-fundamentals.json`, `dq-report.json`, `jobs/*.json` | batch jobs | Cluster |
+| `benchmarks/rdd-fundamentals-{local,cluster}.json` and their `-job.json` reports (the RDD lab on the laptop and on the Docker cluster: same bytes, different timings and cache fit) | `scripts/benchmark.ps1`, running RddFundamentalsJob a second time on the cluster | `rdd-lab` portal, act 7; the report's benchmark table |
 | `network-summary.json` (graph size, vertex-cut comparison, PageRank runs and rankings, AM/PM shift, strength, communities, components, triangles, paths, operator tour, timings), `network-nodes.json` (one row per station, all metrics), `network-flows.json` (top routes overall, AM and PM), `network-communities.json`, `network-paths.json` (hops to hubs, travel times and personalized PageRank per landmark), `network-pregel.json` (superstep-by-superstep PageRank on a hub neighbourhood) | GraphMetricsJob | Network, `pregel` / `network` / `graph-ops` portals |
 | `spark-ui.json` (applications, the RDD lab's jobs and shuffle stages with task-time quantiles, the insights job's widest SQL plan, Pregel superstep jobs, executors) | `velograph.ops.spark_ui_export`, from the history server's REST API | `spark-ui` portal |
 | `archetypes.json` (k selection, centres as hourly curves, PCA points, stability), `ml-features.json` (windows, leakage checks, τ, class balance, feature dictionary) | StationArchetypesJob, FeatureBuildJob | `models` portal; the labs read the dictionary |
 | `ml-correlation.json` (Lab 01), `ml-regression.json` (Lab 02: grid, tuning, leaderboards, errors by hour and archetype, calibration, importances), `ml-classification.json` (Lab 03: baselines, leaderboard, confusion matrices), `ml-ablation.json` (Lab 04) | PySpark ML lab notebooks | `models` portal |
 | `model-cards.json` (algorithm, parameters, features, windows, Scala vs lab metric, training rows and time, Spark version, git SHA) | TrainChampionJob | `models` portal |
+| `model-evaluation.json` (the saved champions on the test month: regression metrics against the seasonal naive forecast, classification metrics and the confusion matrix against the majority class) | EvaluateChampionsJob | the report's section 6.3, the README |
 | `live-features.json` (window, leakage check, district alignment, archetype counts) | LiveFeaturesJob | `streaming` portal |
 | `live/snapshot.json` (every station's state, forecast and projection, KPIs, moves, recent alerts) | LiveStationScoringJob, every micro-batch | `/live`, `streaming` portal |
 | `live/stream-progress.json` (the last 120 micro-batches of both queries) | LiveStationScoringJob's listener | `streaming` portal |
@@ -696,8 +711,12 @@ Dev-mode Spark settings: `spark.master=local[20]`, `spark.sql.shuffle.partitions
   boundaries (no-leakage assertions), weighted PageRank and LPA on toy graphs with known answers, triangle counts and
   the rebalancing matcher.
 - **Python:** pytest for CDC diffing, replay pacing and gateway endpoints.
-- **Contracts:** `scripts/validate_exports.py` checks every serving envelope and its required fields; the web app parses
-  with zod.
+- **Contracts:** `scripts/validate_exports.py` checks every serving envelope and that every file the website loads
+  exists; the web app then parses each file with zod at build time.
+- **Static analysis:** SonarCloud analyses every push; its quality gate (reliability, security and maintainability
+  ratings on new code) passes.
+- **Operations:** `scripts/pipeline.ps1` runs the batch stages with timings and `scripts/demo.ps1` starts the live
+  system in one command; [RUNBOOK.md](RUNBOOK.md) covers ports, memory and failures.
 - **Reproducibility:** fixed seeds, ML windows in config, exports stamped with source range and git SHA.
 - **Observability:** Spark event logs (history server), per-job report JSON, producer and stream metrics logged every
   minute.
@@ -725,4 +744,5 @@ Open-Meteo.com (CC BY 4.0). Basemap © CARTO, © OpenStreetMap contributors.
 | [011](adr/011-inkglass-design-and-portals.md) | "Inkglass" design language; one evidence portal per module | the user wants every module shown in the UI, maximalist + neumorphic + glass + hand-drawn |
 | [012](adr/012-inkglass-presets-frame-budget-spark-ui.md) | Colour presets; glass without live blur under a frame budget; the Spark UI's charts redrawn from its REST API | design feedback (16 Oct): presets, real Spark dashboards, no scroll lag (frame cost 25–30 ms → 6–7.5 ms) |
 | [013](adr/013-leakage-safe-graph-features-and-archetypes.md) | Graph features recomputed per profile window; archetypes learned once and applied to both windows | the P3 graph includes the test month; cluster and district ids must mean the same in fit and test rows |
+| [015](adr/015-home-replay-pipeline-story-station-search.md) | The home page replays one real evening on the existing canvas, tells the pipeline as a subway line, and searches stations from a static index | the frame budget and one fewer WebGL context; the demo's "architecture in one breath"; offline-safe search |
 | [014](adr/014-live-scoring-state-risk-and-latency.md) | Live scoring keeps station state on the driver, splits risk into now and forecast, plans moves one district at a time, and measures latency on the broker's clock | a micro-batch holds only changed stations; 37 % of stations are empty or full at any evening hour; the Windows clock was 92 s slow |

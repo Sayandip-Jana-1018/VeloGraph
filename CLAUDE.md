@@ -80,6 +80,7 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ ML features | `.\scripts\submit.ps1 station-archetypes -DriverMemory 6g` (~3 min) · `feature-build -DriverMemory 7g` (~7 min) → `gold/station_archetypes`, `gold/ml_features` |
 | ✅ ML lab | `cd python; uv run jupytext --to ipynb --execute lab/01_eda.py` (then `02_regression`, `03_classification`, `04_ablation`; one at a time: each takes an 8 GB driver) |
 | ✅ Champion models | `.\scripts\submit.ps1 train-champion -DriverMemory 8g` (~3 min) → `data/models/*`, `serving/model-cards.json`; fails unless it reproduces the lab within 1 % |
+| ✅ Model evaluation | `.\scripts\submit.ps1 evaluate-champions -DriverMemory 6g` (~30 s): reloads `data/models/*`, prints the September metrics beside their baselines → `serving/model-evaluation.json` |
 | ✅ Live features | `.\scripts\submit.ps1 live-features -DriverMemory 6g` (~5 min) → `gold/live_stations`, `gold/live_profiles` (after `station-archetypes`) |
 | ✅ GBFS → Kafka | `cd python; uv run python -m velograph.ingest.gbfs_producer` (live) · `--source recorded --day 2026-10-16 --start 07:30 --speed 20` (replay); stop with `data\run\gbfs_producer.stop` or Ctrl+C |
 | ✅ Live scoring | `.\scripts\submit.ps1 live-station-scoring -Mode cluster -- --duration-min 30` (`--fresh` drops the checkpoint, `--source replay`); stop with `data\run\live-station-scoring.stop` |
@@ -92,13 +93,18 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Live-feed recorder | `.\scripts\recorder.ps1 start` / `status` / `stop` |
 | ✅ Spark UI export | `cd python; uv run python -m velograph.ops.spark_ui_export` (history server up) → `serving/spark-ui.json` |
 | ✅ Hero replay | `.\scripts\submit.ps1 hero-trips` (~15 s) → `serving/hero-trips.json` (the evening in `velograph.hero`) |
+| ✅ Live backtest | `.\scripts\submit.ps1 live-backtest` (after live runs, with the recorder on) → `serving/live-backtest.json` |
+| ✅ Evidence screenshots | `cd python; uv run python -m velograph.ops.evidence_shots` (demo running) → `docs/assets/evidence/` |
+| ✅ Demo video | `cd python; uv run python -m velograph.ops.demo_video` (demo running) → `submission/VeloGraph-demo.webm` |
 | ✅ Web data sync | `cd web; pnpm sync` (serving JSON, screenshots, MapLibre worker, code snippets, the ⌘K station index → `public/`, `src/generated/`) |
 | ✅ Web dev server | `cd web; pnpm dev` → http://localhost:3000 (stale page after an edit: stop it, delete `web/.next/dev`, restart) |
 | ✅ Web checks | `cd web; pnpm typecheck` · `pnpm lint` · `pnpm build` |
 | ✅ Scroll benchmark | `cd python; uv run python -m velograph.ops.scroll_bench` (web server up; ADR 012 frame budget) |
 | ✅ Lighthouse | `cd web; pnpm build; pnpm start`, then `pnpm dlx lighthouse@13.5.0 http://localhost:3000/ --preset=desktop "--chrome-path=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"` (the first runs after a reboot are noisy: repeat them) |
-| Batch pipeline | `.\scripts\pipeline.ps1 -Mode dev -Stages bronze,silver,gold,sql,graph,ml` |
-| Live demo | `.\scripts\demo.ps1` |
+| ✅ Batch pipeline | `.\scripts\pipeline.ps1` (`-Stages graph,ml`, `-WithLabs`, `-KeepCluster`): 16 steps in ~51 min, containers stopped |
+| ✅ Laptop vs cluster | `.\scripts\benchmark.ps1` (Spark containers up; after a laptop run of `rdd-fundamentals`) → `serving/benchmarks/` |
+| ✅ Report | diagrams: `node docs/report/figures.mjs`, then `cd python; uv run python ../docs/report/render.py`; then `node docs/report/build.mjs` → `submission/VeloGraph-Report.docx` and `.\docs\report\export.ps1` (Word: fields, PDF); `uv run --with pymupdf python ../docs/report/layout.py` narrows figures that leave page gaps |
+| ✅ Live demo | `.\scripts\demo.ps1` (live in ~75 s) · `-Replay -Day 2026-10-16 -Start 20:30` · `-Stop` (`-Down`) |
 
 Windows gotchas, learned the hard way:
 - Quote `-D` flags in PowerShell (`sbt '-Dsbt.color=false'`); unquoted, PowerShell splits them at the dot.
@@ -184,7 +190,8 @@ push without approval.
   - leakage-safe `gold/ml_features`, with GraphX rerun per window (ADR 013);
   - Labs 01–04 in `python/lab/`;
   - champions: a random forest for departures, absolute-loss GBT for arrivals and a one-vs-rest linear-SVM regime
-    classifier, which the Scala `TrainChampionJob` reproduces exactly.
+    classifier, which the Scala `TrainChampionJob` reproduces within its 1 % gate. It was exact at P4, and within
+    0.6 % after the 17 Oct rerun rebuilt the feature table.
 
   The demand models beat the seasonal naive forecast by 6.6 % (departures) and 6.3 % (arrivals). The 10 % target is
   not met, and this is reported honestly. The `models` portal shows it all.
@@ -206,8 +213,22 @@ push without approval.
   - layouts are checked at 1280, 1024, 768 and 390 px, with a menu below 1024 px;
   - reduced motion hydrates cleanly, and there are branded 404 and error pages;
   - Lighthouse (desktop) scores performance 93–98 and accessibility 100 on the 10 pages without a WebGL map.
-- **Next task:** P7 (one-command flows, tests green, README and runbook, live backtest, evidence pack).
-  - Docker runs Kafka and the Spark cluster.
+- **P7 done 18 Oct** (evidence in ROADMAP):
+  - `demo.ps1` is live in 73 s; `pipeline.ps1` runs 16 steps in 50.9 min, and a rerun changes only timings;
+  - tests: Scala 77, Python 30, contracts on 63 exports;
+  - the live backtest: 89.8 % of EMPTY_RISK and 85.5 % of FULL_RISK calls came true, but the bike counts are 5.8 %
+    worse than "no change";
+  - 25 evidence screenshots, and the laptop-versus-cluster benchmark (act 7 of `rdd-lab`).
+- **P8.1–P8.4 done 18 Oct** (evidence in ROADMAP):
+  - the report: 31 pages, Word + PDF, built by `docs/report/build.mjs` (with `layout.py` for full pages), in
+    `submission/` (git-ignored);
+  - the LPU logo, in the git-ignored `docs/assets/brand/`;
+  - the 17-slide deck, a Slides artifact;
+  - the demo video `submission/VeloGraph-demo.webm`;
+  - the viva kit: Q&A Q1–Q95, `cheat-sheet.md` and `scala-tour.md`;
+  - `evaluate-champions` and two console captures of the models.
+- **Next task:** P8.5 rehearsals (the user's), then submission.
+  - The containers are stopped; `demo.ps1` starts them (and `benchmark.ps1` needs the Spark profile up).
   - The GBFS recorder keeps running. It records only while the laptop is awake, and the recordings have gaps where
     it slept; the offline demo needs one full evening.
   - The producer, gateway and scoring job are started on demand (commands above).
