@@ -166,7 +166,8 @@ serving files `kebab-case.json` wrapped in the `meta` envelope (ARCHITECTURE §1
 TODO without a roadmap ID.
 
 **Git** — conventional commits (`feat(graph): weighted PageRank via Pregel`), one per completed task group; never
-push without approval.
+push without approval. No `Co-Authored-By` or other AI-attribution lines in commit messages or PR descriptions
+(the user's decision, 18 Oct 2026; the history was rewritten once, with the user's approval, to remove them).
 
 ## Working a roadmap task
 
@@ -225,7 +226,8 @@ push without approval.
   - the LPU logo, in the git-ignored `docs/assets/brand/`;
   - the 17-slide deck, a Slides artifact;
   - the demo video `submission/VeloGraph-demo.webm`;
-  - the viva kit: Q&A Q1–Q95, `cheat-sheet.md` and `scala-tour.md`;
+  - the viva kit: Q&A Q1–Q95, `cheat-sheet.md`, `scala-tour.md`, and `demo-voiceover.md` (the video's 23
+    captions with their times and a narration for each);
   - `evaluate-champions` and two console captures of the models.
 - **Next task:** P8.5 rehearsals (the user's), then submission.
   - The containers are stopped; `demo.ps1` starts them (and `benchmark.ps1` needs the Spark profile up).
