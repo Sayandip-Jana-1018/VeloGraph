@@ -6,6 +6,7 @@ export const STAGES = [
   { phase: "P3", label: "GraphX", jobs: ["graph-metrics"] },
   { phase: "P4", label: "MLlib", jobs: ["station-archetypes", "feature-build", "train-champion"] },
   { phase: "P5", label: "Live features", jobs: ["live-features"] },
+  { phase: "P6", label: "Web exports", jobs: ["hero-trips"] },
 ] as const;
 
 /** Streaming jobs run until stopped: their report covers one run, not a pipeline step. */

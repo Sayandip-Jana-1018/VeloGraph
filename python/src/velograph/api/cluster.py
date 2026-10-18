@@ -184,6 +184,7 @@ def group_lag(admin: AdminClient, group: str, topics: list[str], md: Any) -> dic
             lag = end - tp.offset if tp.offset >= 0 else 0  # no commit yet: nothing to be behind on
             lag_by_topic[tp.topic] = lag_by_topic.get(tp.topic, 0) + lag
         return {"group": group, "lag": lag_by_topic}
-    except (KafkaException, KeyError) as exc:
+    except (KafkaException, KeyError, TimeoutError) as exc:
+        # While the group's coordinator broker is down its futures time out: the lag is just unknown.
         log.debug("lag of %s unavailable: %s", group, exc)
         return None

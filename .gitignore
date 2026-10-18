@@ -41,3 +41,8 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 *.log
+/submission/
+
+# The university's logo (its artwork, downloaded for the report cover) and the report's generated diagrams
+/docs/assets/brand/
+/docs/report/figures/

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { cacheLife } from "next/cache";
@@ -24,6 +24,16 @@ async function load<T extends z.ZodType>(file: string, schema: T): Promise<z.inf
   const parsed = schema.safeParse(JSON.parse(text));
   if (!parsed.success) throw new Error(`${file} does not match its contract: ${parsed.error.message}`);
   return parsed.data;
+}
+
+/** `load` for an export that only an optional run writes: `null` while the file does not exist. */
+async function loadOptional<T extends z.ZodType>(file: string, schema: T): Promise<z.infer<T> | null> {
+  try {
+    await access(path.join(process.cwd(), "public", "data", file));
+  } catch {
+    return null;
+  }
+  return load(file, schema);
 }
 
 export async function getDqReport() {
@@ -56,6 +66,20 @@ export async function getRddReport() {
   cacheLife("max");
   return load("rdd-fundamentals.json", S.RddReport);
 }
+
+/** The RDD lab on the laptop and on the Docker cluster (`scripts/benchmark.ps1`); `null` until both runs exist. */
+export async function getRddBenchmark() {
+  "use cache";
+  cacheLife("max");
+  const [local, cluster, localJob, clusterJob] = await Promise.all([
+    loadOptional("benchmarks/rdd-fundamentals-local.json", S.RddReport),
+    loadOptional("benchmarks/rdd-fundamentals-cluster.json", S.RddReport),
+    loadOptional("benchmarks/rdd-fundamentals-local-job.json", S.JobReport),
+    loadOptional("benchmarks/rdd-fundamentals-cluster-job.json", S.JobReport),
+  ]);
+  return local && cluster && localJob && clusterJob ? { local, cluster, localJob, clusterJob } : null;
+}
+export type RddBenchmark = NonNullable<Awaited<ReturnType<typeof getRddBenchmark>>>;
 
 export async function getInsightIndex() {
   "use cache";
@@ -197,6 +221,12 @@ export async function getReplayAnalytics() {
   "use cache";
   cacheLife("max");
   return load("live/replay-analytics.json", S.ReplayAnalytics);
+}
+
+export async function getLiveBacktest() {
+  "use cache";
+  cacheLife("max");
+  return load("live-backtest.json", S.LiveBacktest);
 }
 
 export async function getDrills() {

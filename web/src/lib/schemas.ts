@@ -852,6 +852,25 @@ const DrillSample = z.object({
 });
 export type DrillSample = z.infer<typeof DrillSample>;
 
+// ---- P7.4: did the live forecasts come true? (LiveBacktestJob) -------------------------------------------------
+export const LiveBacktest = envelope(
+  z.object({
+    horizonMin: z.number(),
+    coverageMin: z.number(),
+    okSampleEvery: z.number(),
+    window: z.object({ from: z.string(), to: z.string(), zone: z.string() }),
+    predictions: z.number(),
+    mae: z.number(),
+    persistenceMae: z.number(),
+    improvementPct: z.number(),
+    byRisk: z.array(z.object({ risk: z.string(), n: z.number(), mae: z.number(), persistenceMae: z.number() })),
+    calls: z.array(
+      z.object({ risk: z.string(), n: z.number(), cameTrue: z.number(), rate: z.number(), becameFull: z.number() }),
+    ),
+  }),
+);
+export type LiveBacktest = z.infer<typeof LiveBacktest>;
+
 export const Drills = envelope(
   z.object({
     broker: z

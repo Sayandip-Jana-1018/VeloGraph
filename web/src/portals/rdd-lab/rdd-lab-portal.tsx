@@ -3,9 +3,10 @@ import { Notate } from "@/components/inkglass/ink-client";
 import { sketch } from "@/components/inkglass/rough";
 import { Glass, KpiPuck } from "@/components/inkglass/surfaces";
 import { Act, CodePanel, Ledger, VivaNote, WithNote } from "@/components/portal/blocks";
-import { getRddReport } from "@/lib/data";
+import { getRddBenchmark, getRddReport } from "@/lib/data";
 import { bytes, duration, fixed, int } from "@/lib/format";
 
+import { LaptopOrCluster } from "./rdd-benchmark";
 import { HourlyChart, PersistenceChart, ShuffleChart } from "./rdd-charts";
 
 /** One step of `toDebugString`, read from the job's real output. */
@@ -72,7 +73,7 @@ function ShuffleSketch({ crossing, label }: { crossing: number; label: string })
 }
 
 export async function RddLabPortal() {
-  const { data: r } = await getRddReport();
+  const [{ data: r }, bench] = await Promise.all([getRddReport(), getRddBenchmark()]);
   const op = Object.fromEntries(r.shuffle.map((s) => [s.operation, s]));
   const ratio = op.groupByKey.shuffleBytes / op.reduceByKey.shuffleBytes;
   const lineage = parseLineage(r.lineage);
@@ -235,6 +236,8 @@ export async function RddLabPortal() {
         </div>
       </Act>
 
+      {bench && <LaptopOrCluster n={7} bench={bench} />}
+
       <Ledger
         rows={[
           { label: "groupByKey shuffle", value: bytes(op.groupByKey.shuffleBytes), path: "rdd-fundamentals.json · shuffle[groupByKey].shuffleBytes" },
@@ -243,6 +246,15 @@ export async function RddLabPortal() {
           { label: "Accumulator (action / map)", value: `${int(r.accumulators.inAction)} / ${int(r.accumulators.inTransformationAfterTwoActions)}`, path: "rdd-fundamentals.json · accumulators" },
           { label: "Cached recount (MEMORY_ONLY)", value: duration(persist.MEMORY_ONLY.secondCountMs), path: "rdd-fundamentals.json · persistence[MEMORY_ONLY]" },
           { label: "Parsed trips", value: int(r.trips), path: "rdd-fundamentals.json · trips" },
+          ...(bench
+            ? [
+                {
+                  label: "Whole job, laptop / cluster",
+                  value: `${duration(bench.localJob.data.durationMs)} / ${duration(bench.clusterJob.data.durationMs)}`,
+                  path: "benchmarks/rdd-fundamentals-{local,cluster}-job.json · durationMs",
+                },
+              ]
+            : []),
         ]}
       />
     </>

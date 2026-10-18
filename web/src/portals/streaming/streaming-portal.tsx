@@ -2,6 +2,7 @@ import { Glass, KpiPuck } from "@/components/inkglass/surfaces";
 import { Act, CodePanel, Ledger, VivaNote, WithNote } from "@/components/portal/blocks";
 import {
   getDrills,
+  getLiveBacktest,
   getLiveFeatures,
   getLiveSnapshot,
   getProducerStats,
@@ -12,6 +13,7 @@ import { fixed, int, pct } from "@/lib/format";
 import { quantile, scoringLatency } from "@/lib/stream-stats";
 
 import { LiveBoard } from "./live-board";
+import { STATE, STATE_ORDER } from "./live-colors";
 import { StreamLoop } from "./stream-loop";
 import {
   AppendWindowsChart,
@@ -47,8 +49,25 @@ function Funnel({ rows }: { rows: { label: string; value: number; note: string; 
 }
 
 export async function StreamingPortal() {
-  const [{ data: snapshot }, { data: progress }, { data: producer }, { data: replay }, { data: drills }, { data: features }] =
-    await Promise.all([getLiveSnapshot(), getStreamProgress(), getProducerStats(), getReplayAnalytics(), getDrills(), getLiveFeatures()]);
+  const [
+    { data: snapshot },
+    { data: progress },
+    { data: producer },
+    { data: replay },
+    { data: drills },
+    { data: features },
+    { data: backtest },
+  ] = await Promise.all([
+    getLiveSnapshot(),
+    getStreamProgress(),
+    getProducerStats(),
+    getReplayAnalytics(),
+    getDrills(),
+    getLiveFeatures(),
+    getLiveBacktest(),
+  ]);
+  const call = (risk: string) => backtest.calls.find((c) => c.risk === risk);
+  const [emptyCalls, fullCalls, okCalls] = [call("EMPTY_RISK"), call("FULL_RISK"), call("OK")];
 
   const { scoring, batches: timedBatches, p50, p95 } = scoringLatency(progress);
   const rows = scoring.reduce((s, b) => s + b.inputRows, 0);
@@ -239,6 +258,67 @@ export async function StreamingPortal() {
         </Act>
       )}
 
+      <Act
+        n={6}
+        title="Did the forecasts come true?"
+        lede={`Every prediction the job stored, checked against what the live-feed recorder saw ${backtest.horizonMin} minutes later: ${int(backtest.predictions)} predictions between ${backtest.window.from} and ${backtest.window.to}, New York time. A prediction counts only if the recorder was running at its target time.`}
+      >
+        <div className="flex flex-wrap justify-center gap-4">
+          <KpiPuck
+            label={`Error after ${backtest.horizonMin} min`}
+            value={`${fixed(backtest.mae, 2)} bikes`}
+            note={`no-change forecast: ${fixed(backtest.persistenceMae, 2)} bikes`}
+          />
+          {emptyCalls && (
+            <KpiPuck label="Empty calls that came true" value={pct(emptyCalls.rate * 100, 0)} note={`${int(emptyCalls.cameTrue)} of ${int(emptyCalls.n)} "empties soon"`} />
+          )}
+          {fullCalls && (
+            <KpiPuck label="Full calls that came true" value={pct(fullCalls.rate * 100, 0)} note={`${int(fullCalls.cameTrue)} of ${int(fullCalls.n)} "fills soon"`} />
+          )}
+          {okCalls && (
+            <KpiPuck
+              label="Base rate"
+              value={pct((okCalls.cameTrue / Math.max(1, okCalls.n)) * 100, 1)}
+              note={`of stations called fine emptied anyway (1 in ${backtest.okSampleEvery} sampled)`}
+            />
+          )}
+        </div>
+        <WithNote
+          note={
+            <VivaNote>
+              The live forecast is judged against the simplest rival, that nothing changes in the next hour. An alert is
+              worth sending only if its station empties far more often than a station the model called fine.
+            </VivaNote>
+          }
+        >
+          <Glass variant="inset" className="overflow-x-auto p-5">
+            <table className="w-full text-sm">
+              <caption className="mb-3 text-left font-display text-base font-bold text-fg">Error by state, in bikes</caption>
+              <thead>
+                <tr className="text-left text-xs text-fg-3">
+                  <th scope="col" className="py-1 pr-4 font-semibold">State at prediction time</th>
+                  <th scope="col" className="py-1 pr-4 text-right font-semibold">Predictions</th>
+                  <th scope="col" className="py-1 pr-4 text-right font-semibold">Model</th>
+                  <th scope="col" className="py-1 text-right font-semibold">No change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {STATE_ORDER.flatMap((risk) => backtest.byRisk.filter((r) => r.risk === risk)).map((r) => (
+                  <tr key={r.risk} className="border-t border-white/5">
+                    <th scope="row" className="py-1.5 pr-4 text-left font-normal text-fg-2">
+                      {STATE[r.risk as keyof typeof STATE]?.label ?? r.risk}
+                    </th>
+                    <td className="py-1.5 pr-4 text-right text-fg tabular-nums">{int(r.n)}</td>
+                    <td className="py-1.5 pr-4 text-right font-semibold text-fg tabular-nums">{fixed(r.mae, 2)}</td>
+                    <td className="py-1.5 text-right text-fg-2 tabular-nums">{fixed(r.persistenceMae, 2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Glass>
+        </WithNote>
+      </Act>
+
       <Ledger
         rows={[
           { label: "Station messages published (CDC)", value: int(c.station_messages ?? 0), path: "live/producer-stats.json · counts" },
@@ -255,6 +335,8 @@ export async function StreamingPortal() {
             ? [{ label: "Replay queries (append / update)", value: `${station15.batches} / ${system60.batches} batches`, path: "live/replay-analytics.json · queries" }]
             : []),
           ...(broker ? [{ label: "Broker drill: failed deliveries", value: int(broker.producerFailed), path: "live/drills.json · broker" }] : []),
+          { label: "Backtest: error after 60 min, model / no change", value: `${fixed(backtest.mae, 2)} / ${fixed(backtest.persistenceMae, 2)} bikes`, path: "live-backtest.json · mae, persistenceMae" },
+          ...(emptyCalls ? [{ label: "Backtest: empty calls that came true", value: `${int(emptyCalls.cameTrue)} of ${int(emptyCalls.n)}`, path: "live-backtest.json · calls" }] : []),
         ]}
       />
     </>

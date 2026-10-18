@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -59,6 +60,17 @@ def create_app(*, live_dir: Path | None = None, start_consumer: bool = True) -> 
     consumer = LiveConsumer(broadcaster) if start_consumer else None
     admin = AdminClient({"bootstrap.servers": bootstrap_servers(), "socket.timeout.ms": 4000})
     http = httpx.Client()
+    kafka_lock = threading.Lock()
+    kafka_seen: dict[str, Any] = {"at": float("-inf"), "value": None}
+
+    def kafka_state() -> dict[str, Any]:
+        # One admin request at a time, and a reading reused for 5 s: /api/health and /api/cluster both ask.
+        # The gateway crashed natively (exit 139) in two broker drills, when overlapping admin requests met
+        # a broker going down; serialised, it rode through every outage tried since.
+        with kafka_lock:
+            if kafka_seen["value"] is None or time.monotonic() - kafka_seen["at"] > 5:
+                kafka_seen["value"], kafka_seen["at"] = kafka_cluster(admin), time.monotonic()
+            return kafka_seen["value"]
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -82,7 +94,7 @@ def create_app(*, live_dir: Path | None = None, start_consumer: bool = True) -> 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
         kafka, spark = await asyncio.gather(
-            asyncio.to_thread(kafka_cluster, admin), asyncio.to_thread(spark_master, http)
+            asyncio.to_thread(kafka_state), asyncio.to_thread(spark_master, http)
         )
         snapshot = snapshot_status(live)
         stream = {
@@ -142,10 +154,16 @@ def create_app(*, live_dir: Path | None = None, start_consumer: bool = True) -> 
 
     @app.get("/api/cluster")
     async def cluster() -> dict[str, Any]:
-        kafka, spark, docker = await asyncio.gather(
-            asyncio.to_thread(kafka_cluster, admin),
+        # A probe that fails, say while a broker is down, becomes an {"ok": false} entry instead of a 500.
+        results = await asyncio.gather(
+            asyncio.to_thread(kafka_state),
             asyncio.to_thread(spark_master, http),
             asyncio.to_thread(container_stats),
+            return_exceptions=True,
+        )
+        kafka, spark, docker = (
+            {"ok": False, "error": f"{type(r).__name__}: {r}"} if isinstance(r, BaseException) else r
+            for r in results
         )
         return {"generatedAt": now_iso(), "spark": spark, "kafka": kafka, "containers": docker}
 
