@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import threading
 import time
 from collections.abc import AsyncIterator
@@ -84,9 +85,11 @@ def create_app(*, live_dir: Path | None = None, start_consumer: bool = True) -> 
         http.close()
 
     app = FastAPI(title="VeloGraph gateway", version="1", lifespan=lifespan)
+    # The website's origins, comma-separated: a hosted site adds its own (docs/DEPLOYMENT.md).
+    origins = os.environ.get("VELOGRAPH_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
         allow_methods=["GET"],
         allow_headers=["*"],
     )

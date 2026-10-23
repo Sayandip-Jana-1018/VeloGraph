@@ -110,7 +110,8 @@ scripts/   env, doctor, submit, pipeline, demo, recorder
 docs/      ROADMAP, ARCHITECTURE, ADRs, runbook, viva Q&A, report sources, evidence screenshots
 ```
 
-[docs/RUNBOOK.md](docs/RUNBOOK.md) covers ports, memory, Windows quirks and what to do when something fails.
+[docs/RUNBOOK.md](docs/RUNBOOK.md) covers ports, memory, Windows quirks and what to do when something fails, and
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) puts the website on Vercel and the live backend on a cloud VM.
 
 ## Data and licences
 

@@ -306,40 +306,40 @@ const ch2 = [
   h1Plain("2. Background: Cluster Computing with Apache Spark"),
   h2("2.1 From MapReduce to Spark"),
   p(
-    "Hadoop MapReduce made large-scale batch processing on commodity clusters practical, but every MapReduce job reads its input from disk and writes its output back to disk. Multi-step workloads, such as iterative algorithms (PageRank, machine learning) and interactive queries, pay that disk cost at every step. MapReduce is also batch-only; it has no notion of a continuous stream.",
+    "Hadoop MapReduce made large-scale batch processing on commodity clusters practical, but every MapReduce job reads its input from disk and writes its output back to disk [2]. Multi-step workloads, such as iterative algorithms (PageRank, machine learning) and interactive queries, pay that disk cost at every step. MapReduce is also batch-only; it has no notion of a continuous stream.",
   ),
   p(
-    "Apache Spark generalises the model. A program is a directed acyclic graph (DAG) of transformations over distributed datasets, evaluated lazily and executed in memory where possible. Intermediate results can be cached, so iterative algorithms run many times faster than chains of MapReduce jobs. The same engine serves batch processing, SQL, graph processing (GraphX), machine learning (MLlib) and streaming (Structured Streaming).",
+    "Apache Spark generalises the model [1]. A program is a directed acyclic graph (DAG) of transformations over distributed datasets, evaluated lazily and executed in memory where possible. Intermediate results can be cached, so iterative algorithms run many times faster than chains of MapReduce jobs. The same engine serves batch processing, SQL, graph processing (GraphX), machine learning (MLlib) and streaming (Structured Streaming).",
   ),
   h2("2.2 Spark architecture"),
   ...bullets([
     "**Driver:** the process that runs the application's `main` function, plans the DAG into stages and tasks, and schedules them.",
     "**Cluster manager:** allocates resources. VeloGraph uses Spark's own standalone manager (one master, two workers) for the cluster and local mode on the host.",
     "**Executors:** JVM processes on the workers that run tasks and keep cached data.",
-    "**Jobs, stages and tasks:** an action triggers a job; the job is split into stages at shuffle boundaries (wide dependencies); each stage runs one task per partition.",
+    "**Jobs, stages and tasks:** an action triggers a job; the job is split into stages at shuffle boundaries (wide dependencies); each stage runs one task per partition [12].",
   ]),
   h2("2.3 RDDs, DataFrames and Spark SQL"),
   p(
-    "The resilient distributed dataset (RDD) is Spark's core abstraction: an immutable, partitioned collection that records its lineage (how it was derived), so a lost partition can be recomputed instead of replicated. Transformations (map, filter, reduceByKey) are lazy; actions (count, collect) run them. Narrow transformations stay within a partition, while wide ones such as reduceByKey and join need a shuffle across the cluster.",
+    "The resilient distributed dataset (RDD) is Spark's core abstraction: an immutable, partitioned collection that records its lineage (how it was derived), so a lost partition can be recomputed instead of replicated [1]. Transformations (map, filter, reduceByKey) are lazy; actions (count, collect) run them. Narrow transformations stay within a partition, while wide ones such as reduceByKey and join need a shuffle across the cluster.",
   ),
   p(
-    "DataFrames add a schema to distributed data, and Spark SQL lets the same data be queried with SQL. Both go through the Catalyst optimiser, which rewrites the logical plan (predicate pushdown, column pruning, join selection) and generates efficient code with whole-stage code generation (Tungsten).",
+    "DataFrames add a schema to distributed data, and Spark SQL lets the same data be queried with SQL. Both go through the Catalyst optimiser, which rewrites the logical plan (predicate pushdown, column pruning, join selection) and generates efficient code with whole-stage code generation (Tungsten) [3].",
   ),
   h2("2.4 GraphX and the Pregel model"),
   p(
-    "GraphX represents a property graph as two distributed collections: vertices and edges, each with attributes. Large graphs are split by vertex-cut partitioning: edges are assigned to partitions, and vertices are replicated where their edges are. Iterative graph algorithms are expressed in the Pregel model: in each superstep every active vertex runs a vertex program on the messages it received, then sends messages along its edges; the computation stops when no messages are sent. PageRank, connected components and label propagation all fit this model.",
+    "GraphX represents a property graph as two distributed collections: vertices and edges, each with attributes [4]. Large graphs are split by vertex-cut partitioning: edges are assigned to partitions, and vertices are replicated where their edges are. Iterative graph algorithms are expressed in the Pregel model: in each superstep every active vertex runs a vertex program on the messages it received, then sends messages along its edges; the computation stops when no messages are sent [5]. PageRank, connected components and label propagation all fit this model.",
   ),
   h2("2.5 MLlib"),
   p(
-    "MLlib is Spark's machine-learning library. Its Pipeline API chains feature transformers (assemblers, scalers, encoders) and estimators (linear models, decision trees, random forests, gradient-boosted trees, support vector machines, naive Bayes, k-means) into one object that can be fitted, evaluated and saved. Training is distributed across the executors.",
+    "MLlib is Spark's machine-learning library [9]. Its Pipeline API chains feature transformers (assemblers, scalers, encoders) and estimators (linear models, decision trees, random forests, gradient-boosted trees, support vector machines, naive Bayes, k-means) into one object that can be fitted, evaluated and saved. Training is distributed across the executors.",
   ),
   h2("2.6 Apache Kafka"),
   p(
-    "Kafka is a distributed, partitioned, replicated commit log. Producers append records to topics; each topic is split into partitions, and the record key decides the partition, so records with the same key stay in order. Each partition has a leader and followers on other brokers; with replication factor 3 and a minimum of 2 in-sync replicas, a write acknowledged by the leader (acks=all) survives the loss of a broker. Consumers in a consumer group share the partitions and commit their offsets. Recent versions replace ZooKeeper with KRaft, a built-in consensus quorum of controllers.",
+    "Kafka is a distributed, partitioned, replicated commit log [10]. Producers append records to topics; each topic is split into partitions, and the record key decides the partition, so records with the same key stay in order. Each partition has a leader and followers on other brokers; with replication factor 3 and a minimum of 2 in-sync replicas, a write acknowledged by the leader (acks=all) survives the loss of a broker. Consumers in a consumer group share the partitions and commit their offsets. Recent versions replace ZooKeeper with KRaft, a built-in consensus quorum of controllers [13].",
   ),
   h2("2.7 Structured Streaming"),
   p(
-    "Structured Streaming treats a stream as an unbounded table and runs the same DataFrame operations on it in micro-batches. Event time (when a thing happened) is distinguished from processing time (when Spark sees it); a watermark tells Spark how long to wait for late data before finalising a window. Output modes (append, update, complete) decide what each micro-batch emits, and checkpoints of offsets and state let a restarted query continue exactly where it stopped.",
+    "Structured Streaming treats a stream as an unbounded table and runs the same DataFrame operations on it in micro-batches [11]. Event time (when a thing happened) is distinguished from processing time (when Spark sees it); a watermark tells Spark how long to wait for late data before finalising a window. Output modes (append, update, complete) decide what each micro-batch emits, and checkpoints of offsets and state let a restarted query continue exactly where it stopped.",
   ),
 ];
 
@@ -348,7 +348,7 @@ const ch3 = [
   h1Plain("3. Data"),
   h2("3.1 Citi Bike trip data"),
   p(
-    `Citi Bike publishes one CSV archive of trips per month. Each trip has a ride id, the bike type (classic or electric), start and end times, start and end stations with coordinates, and whether the rider is a member or a casual user. The project uses June to September 2026: ${f.data.inputRows} rows in all. Table ${mark("months", "table")} shows the volume by month.`,
+    `Citi Bike publishes one CSV archive of trips per month [14]. Each trip has a ride id, the bike type (classic or electric), start and end times, start and end stations with coordinates, and whether the rider is a member or a casual user. The project uses June to September 2026: ${f.data.inputRows} rows in all. Table ${mark("months", "table")} shows the volume by month.`,
   ),
   ...table(
     "Trip records by month (bronze rows, valid rows after the silver rules, quarantined rows)",
@@ -358,11 +358,11 @@ const ch3 = [
   ),
   h2("3.2 The live GBFS feed"),
   p(
-    `GBFS is the open standard through which bike-share systems publish live data as JSON. VeloGraph reads Citi Bike's station_information (names, positions, capacity) and station_status (bikes and docks available, last report time) for ${f.data.liveStations} stations. A recorder saves the feed every 60 seconds, so that live features can be replayed and the forecasts checked later; a producer publishes it to Kafka.`,
+    `GBFS is the open standard through which bike-share systems publish live data as JSON [15]. VeloGraph reads Citi Bike's station_information (names, positions, capacity) and station_status (bikes and docks available, last report time) for ${f.data.liveStations} stations. A recorder saves the feed every 60 seconds, so that live features can be replayed and the forecasts checked later; a producer publishes it to Kafka.`,
   ),
   h2("3.3 Weather and calendar"),
   p(
-    "Hourly weather for New York (temperature, apparent temperature, precipitation, wind, humidity, cloud cover) comes from the Open-Meteo archive and forecast APIs. A calendar dimension marks weekends and US public holidays. Both are joined to the station-hour panel and used as model features.",
+    "Hourly weather for New York (temperature, apparent temperature, precipitation, wind, humidity, cloud cover) comes from the Open-Meteo archive and forecast APIs [16]. A calendar dimension marks weekends and US public holidays. Both are joined to the station-hour panel and used as model features.",
   ),
   h2("3.4 Data quality"),
   p(
@@ -452,8 +452,8 @@ const ch5 = [
     `The stations form a directed, weighted property graph: ${f.graph.vertices} vertices and ${f.graph.edges} edges, one per route ridden, weighted by trips (${f.graph.trips} in all). The graph is dense (density ${f.graph.density}) and largely reciprocal (${f.graph.reciprocity} of edges have a reverse edge).`,
   ),
   ...bullets([
-    `**Weighted PageRank with the Pregel API:** each superstep, a vertex adds the incoming rank shares (vprog) and sends its rank change along its out-edges in proportion to their trips (sendMsg); messages to one vertex are summed (mergeMsg). It converged in ${f.graph.supersteps} supersteps (${f.graph.pagerankSeconds} s) and agrees with GraphX's built-in PageRank (Spearman ${f.graph.spearman}). The top stations: ${f.graph.top.slice(0, 3).join("; ")}.`,
-    `**Communities:** label propagation found ${f.graph.lpaCommunities} raw communities (modularity ${f.graph.lpaModularity}); merging small ones gave ${f.graph.communities} districts with modularity ${f.graph.modularity}.`,
+    `**Weighted PageRank with the Pregel API [5], [6]:** each superstep, a vertex adds the incoming rank shares (vprog) and sends its rank change along its out-edges in proportion to their trips (sendMsg); messages to one vertex are summed (mergeMsg). It converged in ${f.graph.supersteps} supersteps (${f.graph.pagerankSeconds} s) and agrees with GraphX's built-in PageRank (Spearman ${f.graph.spearman}). The top stations: ${f.graph.top.slice(0, 3).join("; ")}.`,
+    `**Communities:** label propagation [7] found ${f.graph.lpaCommunities} raw communities (modularity ${f.graph.lpaModularity}, as defined by Newman [8]); merging small ones gave ${f.graph.communities} districts with modularity ${f.graph.modularity}.`,
     `**Structure:** ${f.graph.scc} strongly connected components and ${f.graph.triangles} triangles of strong ties; the average clustering coefficient is ${f.graph.clustering}, against ${f.graph.randomClustering} for a random graph of the same density.`,
     `**Partitioning:** with ${f.graph.partitions} partitions, EdgePartition2D copies each vertex ${f.graph.rf2D} times on average, against ${f.graph.rfRandom} for a random vertex cut.`,
   ]),

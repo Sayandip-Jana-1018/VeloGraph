@@ -1,0 +1,4 @@
+# Vercel CLI uploads this folder as it is, including the git-ignored exports that `pnpm sync` writes into
+# public/data, public/spark-ui and src/generated: the build needs them. Skip only what Vercel rebuilds itself.
+node_modules
+.next

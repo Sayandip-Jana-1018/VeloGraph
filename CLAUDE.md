@@ -105,6 +105,7 @@ data/      (git-ignored) raw, lake, models, stream, checkpoints, serving, spark-
 | ✅ Laptop vs cluster | `.\scripts\benchmark.ps1` (Spark containers up; after a laptop run of `rdd-fundamentals`) → `serving/benchmarks/` |
 | ✅ Report | diagrams: `node docs/report/figures.mjs`, then `cd python; uv run python ../docs/report/render.py`; then `node docs/report/build.mjs` → `submission/VeloGraph-Report.docx` and `.\docs\report\export.ps1` (Word: fields, PDF); `uv run --with pymupdf python ../docs/report/layout.py` narrows figures that leave page gaps |
 | ✅ Live demo | `.\scripts\demo.ps1` (live in ~75 s) · `-Replay -Day 2026-10-16 -Start 20:30` · `-Stop` (`-Down`) |
+| Hosting | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): the website on Vercel (`cd web; pnpm sync; pnpm dlx vercel deploy --prod`), the live backend on a cloud VM; the gateway reads `VELOGRAPH_CORS_ORIGINS` |
 
 Windows gotchas, learned the hard way:
 - Quote `-D` flags in PowerShell (`sbt '-Dsbt.color=false'`); unquoted, PowerShell splits them at the dot.
