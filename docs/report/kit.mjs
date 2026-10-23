@@ -124,6 +124,14 @@ export const steps = (items, instance) =>
   items.map((t) => new Paragraph({ children: runs(t), numbering: { reference: "steps", level: 0, instance }, spacing: { after: 60 } }));
 export const link = (text, url) => new ExternalHyperlink({ link: url, children: [new TextRun({ text, style: "Hyperlink" })] });
 
+/** A table cell's runs: plain text, or a list of parts where `{ text, url }` is a clickable link. */
+const cellRuns = (value, base) =>
+  (Array.isArray(value) ? value : [String(value)]).flatMap((part) =>
+    typeof part === "string"
+      ? runs(part, base)
+      : [new ExternalHyperlink({ link: part.url, children: [new TextRun({ text: part.text, style: "Hyperlink", ...base })] })],
+  );
+
 /** Width and height of a PNG or JPEG, read from its header. */
 export function imageSize(path) {
   const b = readFileSync(path);
@@ -256,7 +264,7 @@ export function table(caption, header, rows, { widths, align = [], fontSize = 19
           alignment: align[i] === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
           keepNext: head,
           spacing: { after: 0, line: 252 },
-          children: runs(String(text), { size: fontSize, bold: head || undefined, color: head ? COLORS.ink : undefined }),
+          children: cellRuns(text, { size: fontSize, bold: head || undefined, color: head ? COLORS.ink : undefined }),
         }),
       ],
     });

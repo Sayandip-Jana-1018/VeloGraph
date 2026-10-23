@@ -178,9 +178,27 @@ const overview = [
     "The datasets and their sources",
     ["Dataset", "What it holds", "Source"],
     [
-      ["Citi Bike trip histories", `${f.data.inputRows} trips, June to September 2026, as monthly CSV archives`, "s3.amazonaws.com/tripdata (listed at citibikenyc.com/system-data)"],
-      ["Citi Bike live feed (GBFS 2.3)", `station information and status for ${f.data.liveStations} stations, refreshed every minute`, "gbfs.citibikenyc.com/gbfs/2.3/gbfs.json"],
-      ["Open-Meteo weather", "hourly New York weather for the four months, and the current hour for the live job", "archive-api.open-meteo.com/v1/archive and api.open-meteo.com/v1/forecast"],
+      [
+        "Citi Bike trip histories",
+        `${f.data.inputRows} trips, June to September 2026, as monthly CSV archives`,
+        [{ text: "s3.amazonaws.com/tripdata", url: "https://s3.amazonaws.com/tripdata/index.html" }, ", listed at ", { text: "citibikenyc.com/system-data", url: "https://citibikenyc.com/system-data" }],
+      ],
+      [
+        "Citi Bike live feed (GBFS 2.3)",
+        `station information and status for ${f.data.liveStations} stations, refreshed every minute`,
+        [{ text: "gbfs.citibikenyc.com/gbfs/2.3/gbfs.json", url: "https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json" }],
+      ],
+      [
+        "Open-Meteo weather",
+        "hourly New York weather for the four months, and the current hour for the live job",
+        [
+          { text: "open-meteo.com", url: "https://open-meteo.com/" },
+          ": the ",
+          { text: "Historical Weather API", url: "https://open-meteo.com/en/docs/historical-weather-api" },
+          " and the ",
+          { text: "Forecast API", url: "https://open-meteo.com/en/docs" },
+        ],
+      ],
     ],
     { widths: [1.15, 1.6, 1.75], fontSize: 18 },
   ),
@@ -729,7 +747,7 @@ const ch9 = [
     "Run the same jobs on a multi-node cloud cluster, and on the full multi-year trip history.",
     "Add event and transit-disruption data to the features, and forecast several hours ahead.",
     "Turn suggested moves into an optimised truck route (a vehicle-routing problem) over the GraphX districts.",
-    "Store the lake in a table format with time travel (Delta Lake or Apache Iceberg), and serve the website from a public host.",
+    "Store the lake in a table format with time travel (Delta Lake or Apache Iceberg), and host the live backend on a cloud VM, so the public site's live pages update in real time.",
   ]),
 ];
 
@@ -753,7 +771,14 @@ const refs = [
   "Open-Meteo weather API, https://open-meteo.com/.",
 ];
 
-const references = [h1Plain("References"), ...refs.map((r, i) => new Paragraph({ spacing: { after: 100 }, indent: { left: 540, hanging: 540 }, children: [new TextRun(`[${i + 1}]`), new TextRun({ children: [new Tab(), r] })], tabStops: [{ type: TabStopType.LEFT, position: 540 }] }))];
+/** A reference's text, with any URL in it as a clickable link (a trailing full stop stays outside the link). */
+const refRuns = (ref) =>
+  ref
+    .split(/(https?:\/\/\S*[^\s.,;])/)
+    .filter(Boolean)
+    .map((part) => (/^https?:\/\//.test(part) ? link(part, part) : new TextRun(part)));
+
+const references = [h1Plain("References"), ...refs.map((r, i) => new Paragraph({ spacing: { after: 100 }, indent: { left: 540, hanging: 540 }, children: [new TextRun(`[${i + 1}]`), new TextRun({ children: [new Tab()] }), ...refRuns(r)], tabStops: [{ type: TabStopType.LEFT, position: 540 }] }))];
 
 const appendixA = [
   h1Plain("Appendix A. How to Run VeloGraph"),
