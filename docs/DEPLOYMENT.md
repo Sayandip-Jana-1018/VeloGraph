@@ -41,7 +41,7 @@ and `.next`).
    - *In which directory is your code located?* `./`.
 
    Keep the detected settings (Next.js, `pnpm install`, `next build`). Vercel then builds in the cloud and prints
-   the address, for example `https://velograph.vercel.app`.
+   the address: this project is live at `https://velograph-sj.vercel.app`.
 3. Open the address and check `/`, `/portal/lake`, `/portal/models` and `/live`. If a portal fails with "Missing
    ….json", the data was not uploaded: run `pnpm sync` again and redeploy.
 4. After a new pipeline run, update the site with `pnpm sync` and then `pnpm dlx vercel deploy --prod`.
@@ -141,7 +141,7 @@ After=docker.service
 [Service]
 User=azureuser
 WorkingDirectory=/home/azureuser/velograph/python
-Environment=VELOGRAPH_CORS_ORIGINS=https://velograph.vercel.app
+Environment=VELOGRAPH_CORS_ORIGINS=https://velograph-sj.vercel.app
 ExecStart=/home/azureuser/.local/bin/uv run uvicorn velograph.api.main:app --host 127.0.0.1 --port 8000
 Restart=always
 

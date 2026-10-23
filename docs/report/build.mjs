@@ -7,6 +7,7 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  ExternalHyperlink,
   Footer,
   Header,
   NumberFormat,
@@ -41,15 +42,25 @@ import {
   refOf,
   h2,
   h3,
+  link,
   noBorders,
   numbering,
   p,
+  runs,
   styles,
   table,
   TEXT_DXA,
 } from "./kit.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
+const SITE = "https://velograph-sj.vercel.app";
+const REPO = "https://github.com/Sayandip-Jana-1018/VeloGraph";
+/** A justified paragraph with one clickable address in it: `before`, the link, then `after`. */
+const withLink = (before, url, after) =>
+  new Paragraph({
+    alignment: AlignmentType.JUSTIFIED,
+    children: [...runs(before), link(url.replace("https://", ""), url), ...runs(after)],
+  });
 const EVIDENCE = join(ROOT, "docs", "assets", "evidence");
 const SPARKUI = join(ROOT, "docs", "assets", "spark-ui");
 const FIG = join(import.meta.dirname, "figures");
@@ -132,8 +143,51 @@ const cover = [
 ];
 
 // ---- front matter ----------------------------------------------------------------------------------------------
+/** A link set large and centred under a small label, for the overview page. */
+const bigLink = (label, url, size) => [
+  new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 160, after: 40 },
+    children: [new TextRun({ text: label, bold: true, size: 20, color: COLORS.teal })],
+  }),
+  new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 120 },
+    children: [new ExternalHyperlink({ link: url, children: [new TextRun({ text: url.replace("https://", ""), style: "Hyperlink", bold: true, size })] })],
+  }),
+];
+
+const overview = [
+  front("Project Overview", true),
+  ...bigLink("LIVE WEBSITE", SITE, 52),
+  ...bigLink("SOURCE CODE ON GITHUB", REPO, 40),
+  h3("Problem statement"),
+  p(
+    "Bike-share stations run empty or full within the hour, which strands riders, and operators move bikes by van, so they need to know which stations are about to fail before it happens. Given four months of historical trips and the live station feed, the project builds a system that (a) forecasts next-hour departures and arrivals at every station, (b) combines those forecasts with the live feed to flag stations that are about to run empty or full, (c) suggests rebalancing moves, and (d) explains the structure of the network, all on a real Spark cluster and a real Kafka cluster, with every result measured on real data.",
+  ),
+  h3("Solution"),
+  ...bullets([
+    `**Batch (Spark):** a medallion lake of ${f.data.validRowsM} million clean trips, ${f.sql.queries} Spark SQL insights, and an RDD lab that measures shuffles, caching and shared variables.`,
+    `**Network (GraphX):** ${f.graph.vertices} stations as a weighted graph; PageRank written with Pregel, and ${f.graph.communities} districts found by label propagation.`,
+    `**Forecasts (MLlib):** leakage-safe features; a random forest, gradient-boosted trees and a linear SVM, each judged against a seasonal naive baseline.`,
+    `**Live (Kafka and Structured Streaming):** the GBFS feed through three Kafka brokers to Spark, which re-scores all ${f.data.liveStations} stations every 30 seconds, raises alerts and suggests moves.`,
+    "**Website (Next.js):** an evidence portal for every module, reading only the results the jobs wrote.",
+  ]),
+  h3("Datasets and where they come from"),
+  ...table(
+    "The datasets and their sources",
+    ["Dataset", "What it holds", "Source"],
+    [
+      ["Citi Bike trip histories", `${f.data.inputRows} trips, June to September 2026, as monthly CSV archives`, "s3.amazonaws.com/tripdata (listed at citibikenyc.com/system-data)"],
+      ["Citi Bike live feed (GBFS 2.3)", `station information and status for ${f.data.liveStations} stations, refreshed every minute`, "gbfs.citibikenyc.com/gbfs/2.3/gbfs.json"],
+      ["Open-Meteo weather", "hourly New York weather for the four months, and the current hour for the live job", "archive-api.open-meteo.com/v1/archive and api.open-meteo.com/v1/forecast"],
+    ],
+    { widths: [1.15, 1.6, 1.75], fontSize: 18 },
+  ),
+];
+
 const glance = [
-  front("VeloGraph at a Glance", true),
+  front("VeloGraph at a Glance"),
   p(
     `VeloGraph turns ${f.data.inputRowsM} million real Citi Bike trips and the live New York station feed into a forecast for every station, every 30 seconds. It runs on a Spark cluster and a three-broker Kafka cluster, and a website shows the evidence for every part of it. The screenshots on these two pages were taken from the running system, in the website's six colour themes.`,
   ),
@@ -718,7 +772,7 @@ const appendixA = [
     ],
     { widths: [1.2, 2.4] },
   ),
-  p("The source code, with a README, an architecture document, decision records and a runbook, is in the project repository: https://github.com/Sayandip-Jana-1018/VeloGraph."),
+  withLink("The source code, with a README, an architecture document, decision records and a runbook, is in the project repository, ", REPO, "."),
 ];
 
 const appendixB = [
@@ -809,7 +863,7 @@ const doc = new Document({
       properties: { page: { margin: margins, pageNumbers: { start: 1, formatType: NumberFormat.LOWER_ROMAN } } },
       headers: { default: header },
       footers: { default: footer },
-      children: [...glance, ...declaration, ...certificate, ...acknowledgement, ...abstract, ...contents],
+      children: [...overview, ...glance, ...declaration, ...certificate, ...acknowledgement, ...abstract, ...contents],
     },
     {
       properties: { page: { margin: margins, pageNumbers: { start: 1, formatType: NumberFormat.DECIMAL } } },

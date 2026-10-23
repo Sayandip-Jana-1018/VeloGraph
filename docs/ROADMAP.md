@@ -555,8 +555,8 @@ frames: `rowsBetween` vs `rangeBetween` · health checks and readiness in a star
 **Evidence (17–18 Oct):**
 - **Report:** `docs/report/build.mjs` builds it from the exports, and `export.ps1` updates its fields in Word and
   saves the PDF. Every number is read from `data/serving`. The output is `submission/VeloGraph-Report.docx` and
-  `.pdf`, 31 pages:
-  - a cover with the LPU logo and the course details;
+  `.pdf`, 32 pages:
+  - a cover with the LPU logo and the course details, then an overview page with the live site and GitHub links, the problem, the solution and the data sources;
   - two opening pages of ten screenshots in six colour themes;
   - a declaration, certificate, acknowledgement, abstract and contents;
   - 9 chapters, 16 references and 2 appendices, with 22 figures and 11 tables, including the model evaluation's

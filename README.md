@@ -6,7 +6,10 @@ Citi Bike stations:
 - fuses them with the live GBFS feed to flag stations about to run empty or full, and suggests rebalancing moves;
 - explains the network with GraphX.
 
-INT315 Cluster Computing · Continuous Assessment project · Sayandip Jana · 2026
+INT315 Cluster Computing · project · Sayandip Jana · 2026
+
+**Live site: [velograph-sj.vercel.app](https://velograph-sj.vercel.app).** It renders every page from the recorded
+exports, and its live pages show the last recorded snapshot. Run `scripts/demo.ps1` for the live system.
 
 ![The home page: one real evening of trips replayed over the city of lights](docs/assets/evidence/01-home-hero.jpg)
 
@@ -114,6 +117,12 @@ docs/      ROADMAP, ARCHITECTURE, ADRs, runbook, viva Q&A, report sources, evide
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) puts the website on Vercel and the live backend on a cloud VM.
 
 ## Data and licences
+
+| Dataset | What | Source |
+|---|---|---|
+| Citi Bike trip histories | 20,606,696 trips, June–September 2026, monthly CSV archives | [s3.amazonaws.com/tripdata](https://s3.amazonaws.com/tripdata/index.html), listed at [citibikenyc.com/system-data](https://citibikenyc.com/system-data) |
+| Citi Bike live feed (GBFS 2.3) | station information and status, refreshed every minute | [gbfs.citibikenyc.com/gbfs/2.3/gbfs.json](https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json) |
+| Open-Meteo weather | hourly New York weather (archive) and the current hour (forecast) | [archive-api.open-meteo.com](https://open-meteo.com/en/docs/historical-weather-api), [api.open-meteo.com](https://open-meteo.com/en/docs) |
 
 Citi Bike trip data and GBFS feeds © NYC Bike Share, LLC, used under the Citi Bike Data License Agreement. Weather by
 Open-Meteo.com (CC BY 4.0). Basemap © CARTO, © OpenStreetMap contributors. VeloGraph is an independent student

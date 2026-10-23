@@ -222,7 +222,7 @@ push without approval. No `Co-Authored-By` or other AI-attribution lines in comm
     worse than "no change";
   - 25 evidence screenshots, and the laptop-versus-cluster benchmark (act 7 of `rdd-lab`).
 - **P8.1–P8.4 done 18 Oct** (evidence in ROADMAP):
-  - the report: 31 pages, Word + PDF, built by `docs/report/build.mjs` (with `layout.py` for full pages), in
+  - the report: 32 pages (an overview page with the live and GitHub links right after the cover), Word + PDF, built by `docs/report/build.mjs` (with `layout.py` for full pages), in
     `submission/` (git-ignored);
   - the LPU logo, in the git-ignored `docs/assets/brand/`;
   - the 17-slide deck, a Slides artifact;
@@ -230,6 +230,7 @@ push without approval. No `Co-Authored-By` or other AI-attribution lines in comm
   - the viva kit: Q&A Q1–Q95, `cheat-sheet.md`, `scala-tour.md`, and `demo-voiceover.md` (the video's 23
     captions with their times and a narration for each);
   - `evaluate-champions` and two console captures of the models.
+- **Website live** at https://velograph-sj.vercel.app (Vercel, deployed from `web/` with the CLI; recorded data).
 - **Next task:** P8.5 rehearsals (the user's), then submission.
   - The containers are stopped; `demo.ps1` starts them (and `benchmark.ps1` needs the Spark profile up).
   - The GBFS recorder keeps running. It records only while the laptop is awake, and the recordings have gaps where
