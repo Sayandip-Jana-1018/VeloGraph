@@ -38,7 +38,11 @@ and `.next`).
    - *Which scope?* your account;
    - *Link to existing project?* no;
    - *Project name:* `velograph`;
-   - *In which directory is your code located?* `./`.
+   - *In which directory is your code located?* `./`;
+   - *Connect the Git repository?* no. If the CLI connects it anyway, disconnect it with
+     `pnpm dlx vercel git disconnect`. Otherwise every push to GitHub starts a build from the repository root, which
+     has no Next.js app, so it fails ("No Next.js version detected") and puts a red cross on the commit. The live
+     site keeps serving the last good deployment, because a failed build is never promoted.
 
    Keep the detected settings (Next.js, `pnpm install`, `next build`). Vercel then builds in the cloud and prints
    the address: this project is live at `https://velograph-sj.vercel.app`.
